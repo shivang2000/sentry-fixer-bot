@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "bun run src/seed.ts",
+    "db:seed": "cd ../../apps/server && bun run ../../packages/db/src/seed.ts",
     "db:start": "docker compose up -d",
     "db:watch": "docker compose up",
     "db:stop": "docker compose stop",
