@@ -11,8 +11,11 @@ import { type EvlogVariables, evlog } from "evlog/hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { boardClaim } from "./routes/board-claim";
+import { chatWs, websocket } from "./routes/chat-ws";
 import { health } from "./routes/health";
 import { sentryWebhook } from "./routes/sentry-webhook";
+
+export { websocket };
 
 initLogger({
   env: { service: "sentry-fixer-bot-server" },
@@ -50,6 +53,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route("/", health);
 app.route("/", boardClaim);
 app.route("/", sentryWebhook);
+app.route("/", chatWs);
 
 app.use(
   "/trpc/*",
