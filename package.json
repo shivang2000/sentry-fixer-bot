@@ -30,6 +30,7 @@
     "db:studio": "turbo -F @sentry-fixer-bot/db db:studio",
     "db:generate": "turbo -F @sentry-fixer-bot/db db:generate",
     "db:migrate": "turbo -F @sentry-fixer-bot/db db:migrate",
+    "db:seed": "turbo -F @sentry-fixer-bot/db db:seed",
     "db:start": "turbo -F @sentry-fixer-bot/db db:start",
     "db:watch": "turbo -F @sentry-fixer-bot/db db:watch",
     "db:stop": "turbo -F @sentry-fixer-bot/db db:stop",
