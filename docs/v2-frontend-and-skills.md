@@ -7,7 +7,7 @@
 This document expands the MVP from a **headless bot** into a **full operator product** with:
 
 - React frontend served from the same EC2
-- **WorkOS** authentication (admin + invited members, single-tenant)
+- **Better-Auth** with Paperclip-style deployment modes (`local_trusted` / `authenticated`); first signup becomes admin, subsequent signups invite-only
 - MCP server install + per-repo configuration UI
 - Skill install UI: built-in catalog + custom upload + **skills.sh** integration
 - Secret management UI (paste once, persisted to `/etc/sfb/env`)
@@ -26,7 +26,7 @@ The V1 MVP plan (Tasks 0–48 in `plans/2026-05-15-mvp-webhook-to-pr.md`) ships 
 - Secrets live in `.env` only.
 - There is no record of "who configured what".
 
-V2 reframes the bot as a self-service tool: an operator visits a URL, signs in with WorkOS, installs MCPs and skills from a catalog, registers repos, watches runs, and chats with the bot when it needs interactive OAuth (e.g. `gh auth login` analogues for new MCP servers).
+V2 reframes the bot as a self-service tool: an operator clones the repo, deploys to their own EC2, visits a URL, signs in with the email + password they registered as the first user, installs MCPs and skills from a catalog, registers repos, watches runs, and chats with the bot when it needs interactive OAuth (e.g. `gh auth login` analogues for new MCP servers).
 
 V1 and V2 are bundled because the V1 install story (hand-edited YAML, manual systemd) is unacceptable to the operators who will actually run this.
 
@@ -39,14 +39,16 @@ Single-page app served from the same EC2 (same nginx host).
 - **Stack**: React 18 + Vite 5 + TypeScript + Tailwind 4 + Tanstack Router + Tanstack Query
 - **Build output**: `/opt/sfb/current/ui/dist/` served by nginx at `/`
 - **API base**: `/api/*` proxied to Hono on `127.0.0.1:3000`
-- **Auth**: WorkOS AuthKit-hosted login → session cookie
+- **Auth**: Better-Auth (email + password by default) → session cookie. Deployment mode controls whether login is required at all.
 - **Real-time**: Server-sent events (SSE) for run status + chat streaming
 
 ### 2.2 Pages
 
 | Path | Purpose |
 | --- | --- |
-| `/login` | WorkOS-hosted login redirect target |
+| `/login` | Scaffolder-rendered Better-Auth sign-in form (email + password). Hidden in `local_trusted` mode. |
+| `/sign-up` | Better-Auth sign-up form. First user becomes admin automatically; subsequent users require an invite token. |
+| `/board-claim/:token` | One-time claim page shown during `local_trusted → authenticated` migration. |
 | `/` (dashboard) | Recent runs, daily cost, active PRs, alert volume |
 | `/repos` | List + add + edit + remove repos (replaces `repos.yaml`) |
 | `/repos/:repo` | Per-repo settings: test command, reviewers, caps, per-repo MCPs and skills |
@@ -59,18 +61,64 @@ Single-page app served from the same EC2 (same nginx host).
 | `/settings` | Anthropic key, GitHub App config, member invites, daily caps, kill switch |
 | `/audit` | Append-only log of mutating actions, filterable by user + action |
 
-### 2.3 Authentication — WorkOS
+### 2.3 Authentication — Better-Auth, Paperclip-style deployment modes
 
-- **Provider**: WorkOS AuthKit (hosted login UI, OAuth, magic-link, SSO when available)
-- **Free tier**: 1M MAU — easily covers single-tenant deployment
-- **Flow**:
-  1. User hits `/` → server checks session cookie → no session → redirect to `/login`
-  2. `/login` → server-side redirect to WorkOS-hosted login
-  3. WorkOS callback → `/api/auth/callback` exchanges code for user profile
-  4. Server: first user gets `role='admin'`; subsequent users must match an `invites` row keyed by email
-  5. Issue opaque session token → httpOnly cookie → redirect `/`
-- **Roles**: `admin` (everything) / `member` (read-only by default; configurable per-feature)
-- **Invites**: admin adds an email → on next login attempt for that email, the invite is consumed and a `users` row is created
+This is an OSS self-hosted tool: anyone clones the repo and deploys. WorkOS/Clerk/Auth0 as the default would force every self-hoster to register for a third-party service, which breaks the air-gappable property. We adopt the same pattern Paperclip uses (see `paperclip/doc/DEPLOYMENT-MODES.md`).
+
+#### Two runtime modes
+
+| Mode | Human login | Typical use |
+| --- | --- | --- |
+| `local_trusted` | None; bootstrap `local-board` admin | Developer on a laptop running `bun dev` on loopback |
+| `authenticated` | Required (email + password by default) | Deployed EC2, Tailnet operator dashboard, anything past loopback |
+
+Mode is **decoupled from bind**: `bind = loopback | lan | tailnet | custom`. You can run `authenticated + bind=loopback` (logged-in operator behind a TLS reverse proxy) without exposing the instance publicly.
+
+#### Auth library: Better-Auth
+
+- Provided by the scaffolder; Drizzle-backed; `emailAndPassword: { enabled: true, requireEmailVerification: false }`
+- Tables: `authUsers`, `authSessions`, `authAccounts`, `authVerifications` (scaffolder schema)
+- Session cookies prefixed by instance ID so multiple local deployments don't share cookies
+- `BETTER_AUTH_SECRET` required at runtime; fail-fast if unset
+- Trusted origins computed from `bind` + configured base URL
+
+#### Bootstrap rules
+
+1. **First signup → admin**: when no `authUsers` row exists, the next `/api/auth/sign-up` automatically promotes the new user to `instance_admin`.
+2. **Subsequent signups → invite-only**: each new email must match a row in our `invites` table (added by an admin via the UI). No public sign-up.
+3. **Trusted → Authenticated claim URL**: when the server boots in `authenticated` mode and finds that the only admin is the `local-board` bootstrap user (i.e. the operator just switched modes after accumulating state), it logs a one-time URL `/board-claim/<token>?code=<code>`. The first authenticated user to visit it claims admin; `local-board` is demoted. Without this, switching modes would lock the operator out.
+
+#### Optional OAuth / SSO providers (per-deployment, not project default)
+
+Forks that want one-click GitHub or Google login add Better-Auth `providers` config in their own `.env`:
+
+```ts
+providers: {
+  github: { clientId: env.GH_OAUTH_ID, clientSecret: env.GH_OAUTH_SECRET },
+}
+```
+
+Forks running as SaaS or in enterprises can add `genericOAuth` for WorkOS, Auth0, Okta, etc. None of these are dependencies of the upstream project. The OSS deployment works with email+password alone.
+
+#### Roles
+
+- `instance_admin` — installs MCPs/skills, invites members, edits repos, manages secrets
+- `member` — reads runs, opens chat sessions targeting their own repos, but cannot edit settings/secrets
+
+#### Invites
+
+```sql
+CREATE TABLE invites (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email           TEXT NOT NULL UNIQUE,
+  role            TEXT NOT NULL DEFAULT 'member',
+  invited_by      UUID REFERENCES "user"(id),
+  consumed_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Admin pastes an email → row inserted → invitee visits `/sign-up` and the email is allowlisted. After consumption, the row stays for audit (`consumed_at` set) but cannot be reused.
 
 ### 2.4 Repo management (replaces `repos.yaml`)
 
@@ -417,7 +465,7 @@ Runtime is **Bun 1.x** (same as V1). All additions below either ship with Bun or
 
 | What | Why |
 | --- | --- |
-| **WorkOS AuthKit + `@workos-inc/node` SDK** | Auth as a service; free tier covers single-tenant; SSO ready when needed |
+| **Better-Auth + Drizzle adapter** | OSS self-hosted auth from the scaffolder; email + password by default; OAuth providers (GitHub, Google, WorkOS/Auth0 via `genericOAuth`) are per-fork opt-in. Paperclip uses the same library and pattern. |
 | **React 18 + Vite 5 + Tailwind 4** | Standard SPA stack; Vite-on-Bun works natively |
 | **Tanstack Router + Tanstack Query** | Type-safe routing, server-state with revalidation |
 | **Bun PTY (`Bun.spawn` + `pty: true`)** | Spawn Claude with a PTY for chat. Bun's PTY support is preferred over `node-pty` (Bun has limited compat with `node-pty` native bindings; native `Bun.spawn` with `pty: true` is the supported path). If a feature is missing at build time, fall back to spawning Claude under a `script(1)` PTY wrapper. |
@@ -444,7 +492,7 @@ Runtime is **Bun 1.x** (same as V1). All additions below either ship with Bun or
      ┌────────────────────────────────────────────┐
      │ Hono API on EC2                            │
      │  • Static + SPA fallback                   │
-     │  • Auth (WorkOS callback, sessions)        │
+     │  • Auth (Better-Auth sign-in/up, sessions) │
      │  • CRUD: repos, mcps, skills, invites      │
      │  • Skill upload + skills.sh proxy          │
      │  • Chat WebSocket (PTY-backed claude proc) │
@@ -477,7 +525,7 @@ Runtime is **Bun 1.x** (same as V1). All additions below either ship with Bun or
 
 | Choice | Reason | What we considered |
 | --- | --- | --- |
-| **WorkOS over Clerk** | 1M MAU free tier; Clerk paid sooner | Clerk has slightly nicer SDK; price wins for a tool that may sit idle |
+| **Better-Auth over WorkOS/Clerk by default** | This is open-source self-hosted, not SaaS. Default must work without a third-party signup. WorkOS/Clerk become per-fork opt-in plugins via Better-Auth providers. |
 | **Env file over Secrets Manager (UI-managed secrets)** | Trivially editable from UI; user-stated requirement | Secrets Manager + KMS still preferred for ops-managed (bot's own creds); env file used only for UI-pasted MCP secrets |
 | **PTY for chat** | Some interactive CLIs refuse to render to a pipe | `execa` pipes work for most agent runs; chat is the exception |
 | **skills.sh proxy** | One-button install reduces friction | We could scrape; will try API first |
@@ -494,7 +542,7 @@ Additions on top of V1 §7:
 | **Env file leaked to a runaway agent** | Agent runs as `sfb-runner` (uid 4000) with no read access to `/etc/sfb/env` (owned by `sfb-runner` but read via systemd EnvironmentFile, then exec'd — the file itself is mode 0600 root-readable, processes inherit the env. Actually re-check: file must be readable by systemd to load. Set mode 0640 owner root group sfb-runner so sfb-runner can read it at exec time but agent code inside the run can't escalate to the file via fs reads after exec). Net effect: agent processes get env vars but cannot exfiltrate the on-disk file. |
 | **Chat session escapes its sandbox** | Same isolation as agent runs: per-session work dir under `/var/lib/sfb/chat/{session_id}/`, deleted on session end |
 | **Upload bombs** | Zip extraction bounded: max 50 files, max 5 MB total uncompressed, no symlinks pointing outside the extraction dir |
-| **WorkOS misconfiguration leaks the org** | First-user auto-admin only on a fresh install; subsequent installs require explicit `SFB_BOOTSTRAP_ADMIN_EMAIL` env var to pre-seed an admin to prevent stranger from claiming admin |
+| **Stranger claims admin on a fresh public deploy** | First-signup-becomes-admin only fires when `authUsers` is empty. After that, signup requires an invite token. Public-mode deploys must complete first-signup before nginx is open to the internet, or set `SFB_BOOTSTRAP_ADMIN_EMAIL` to pre-seed. Mode `authenticated + public` requires explicit configuration and the doctor command warns if no admin exists yet. |
 
 ## 7. What is NOT in V2 even now
 
@@ -514,7 +562,7 @@ To keep V2 finite:
 | Phase | Calendar | Eng-days |
 | --- | --- | --- |
 | V1 backend (Tasks 0–48 + 44b + 44c) | 6 weeks | 22–28 |
-| V2 frontend scaffold + WorkOS auth | 1 week | 5 |
+| V2 frontend scaffold + Better-Auth + deployment modes + claim URL | 1 week | 5 |
 | V2 repos / MCPs / skills CRUD + UI | 2 weeks | 10 |
 | V2 secret env file flow | 0.5 week | 3 |
 | V2 chat interface (PTY + WS + OAuth URL capture) | 2 weeks | 10 |
@@ -529,7 +577,7 @@ Two engineers in parallel after V1 lands: **~10 weeks**.
 
 ## 9. Open questions to lock in before V2 plan execution
 
-1. **WorkOS account**: who creates it, who holds the org-admin login? Default: ops creates an org-account, paste WORKOS_API_KEY + WORKOS_CLIENT_ID into Secrets Manager at deploy.
+1. **Bootstrap-admin policy on `authenticated + public` deploys**: first-signup-becomes-admin is convenient but a stranger could claim it on a fresh public instance. Mitigation: doctor command refuses to start `authenticated + public` until either an admin exists or `SFB_BOOTSTRAP_ADMIN_EMAIL` is set. Confirm policy is acceptable before V2 ships.
 2. **skills.sh API**: confirm the site exposes a JSON API. If only HTML, the integration becomes "browse-only" with an "Add this URL as a custom skill" button instead.
 3. **Chat history retention**: keep transcripts forever, or auto-purge after 30 days? Default: 30 days, exportable to S3.
 4. **MCP catalog source of truth**: hand-maintained in `src/mcps-catalog/`, OR pulled from a remote registry (Anthropic's official MCP marketplace when it exists)? Default: hand-maintained for V2, with an `import` button that takes a `mcp.json` URL.

@@ -34,7 +34,7 @@ We want to compress the first 80% to zero engineer-minutes and present the engin
 ## 4. Non-goals
 
 - **N1**: Not a general-purpose CI bot. It only reacts to Sentry alerts. Not a code reviewer, not a refactor tool, not a dependency updater.
-- **N2**: Not multi-tenant. One deployment serves one organisation. Multi-tenant adds auth, isolation, billing — out of scope for V1.
+- **N2**: Not multi-tenant. Not a SaaS. This is an open-source project: anyone clones the repo and deploys their own instance. One deployment serves one organisation. The project does not host anyone's data; there is no central control plane we operate. Multi-tenant SaaS hosting is a separate project that someone could build by forking this one and adding tenant tables + billing.
 - **N3**: Not a Sentry replacement. We do not host or proxy Sentry data; we read from Sentry's API on demand.
 - **N4**: Not auto-merge. Even high-confidence fixes are PRs, never direct commits.
 - **N5**: Not a chat interface. There is no "talk to the bot" UI; humans interact via the PR.
