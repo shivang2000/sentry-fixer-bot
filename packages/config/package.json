@@ -1,5 +1,5 @@
 {
-	"name": "@sentry-fixer-bot/config",
-	"version": "0.0.0",
-	"private": true
+  "name": "@sentry-fixer-bot/config",
+  "version": "0.0.0",
+  "private": true
 }

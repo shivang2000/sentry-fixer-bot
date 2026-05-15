@@ -1,27 +1,27 @@
 {
-	"projectName": "sentry-fixer-bot",
-	"frontend": ["tanstack-router"],
-	"backend": "hono",
-	"runtime": "bun",
-	"api": "trpc",
-	"database": "postgres",
-	"orm": "drizzle",
-	"auth": "better-auth",
-	"payments": "none",
-	"addons": ["turborepo", "biome", "husky", "skills", "mcp", "evlog"],
-	"examples": ["none"],
-	"packageManager": "bun",
-	"dbSetup": "docker",
-	"webDeploy": "none",
-	"serverDeploy": "none",
-	"git": true,
-	"install": true,
-	"addonOptions": {
-		"skills": {
-			"scope": "project",
-			"agents": ["claude-code"],
-			"selections": []
-		},
-		"mcp": { "scope": "project", "agents": ["claude-code"], "servers": [] }
-	}
+  "projectName": "sentry-fixer-bot",
+  "frontend": ["tanstack-router"],
+  "backend": "hono",
+  "runtime": "bun",
+  "api": "trpc",
+  "database": "postgres",
+  "orm": "drizzle",
+  "auth": "better-auth",
+  "payments": "none",
+  "addons": ["turborepo", "biome", "husky", "skills", "mcp", "evlog"],
+  "examples": ["none"],
+  "packageManager": "bun",
+  "dbSetup": "docker",
+  "webDeploy": "none",
+  "serverDeploy": "none",
+  "git": true,
+  "install": true,
+  "addonOptions": {
+    "skills": {
+      "scope": "project",
+      "agents": ["claude-code"],
+      "selections": []
+    },
+    "mcp": { "scope": "project", "agents": ["claude-code"], "servers": [] }
+  }
 }

@@ -1,24 +1,24 @@
 {
-	"name": "@sentry-fixer-bot/auth",
-	"type": "module",
-	"exports": {
-		".": {
-			"default": "./src/index.ts"
-		},
-		"./*": {
-			"default": "./src/*.ts"
-		}
-	},
-	"scripts": {},
-	"dependencies": {
-		"@sentry-fixer-bot/db": "workspace:*",
-		"@sentry-fixer-bot/env": "workspace:*",
-		"better-auth": "catalog:",
-		"dotenv": "catalog:",
-		"zod": "catalog:"
-	},
-	"devDependencies": {
-		"@sentry-fixer-bot/config": "workspace:*",
-		"typescript": "catalog:"
-	}
+  "name": "@sentry-fixer-bot/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@sentry-fixer-bot/db": "workspace:*",
+    "@sentry-fixer-bot/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@sentry-fixer-bot/config": "workspace:*",
+    "typescript": "catalog:"
+  }
 }
