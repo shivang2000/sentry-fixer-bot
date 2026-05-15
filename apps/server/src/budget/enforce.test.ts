@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { decideBudget } from "./enforce";
+import { decideBudget } from "./decide";
 
 describe("decideBudget", () => {
   it("allows when under both caps", () => {

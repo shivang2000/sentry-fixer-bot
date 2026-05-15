@@ -1,13 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "@sentry-fixer-bot/env/server";
+import { parseTriageJson, type TriageResult } from "./parse-triage";
+
+export type { TriageResult };
+export { parseTriageJson };
 
 const TRIAGE_MODEL = "claude-haiku-4-5-20251001";
-
-export type TriageResult = {
-  severity: "low" | "medium" | "high" | "critical";
-  summary: string;
-  suspectedFiles: string[];
-};
 
 let cached: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -34,20 +32,4 @@ export async function classify(input: {
   const block = res.content.find((b) => b.type === "text");
   const text = block?.type === "text" ? block.text : "{}";
   return parseTriageJson(text);
-}
-
-export function parseTriageJson(text: string): TriageResult {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return { severity: "medium", summary: "(unparseable)", suspectedFiles: [] };
-  try {
-    const obj = JSON.parse(match[0]) as Partial<TriageResult>;
-    const severity = obj.severity ?? "medium";
-    return {
-      severity: ["low", "medium", "high", "critical"].includes(severity) ? severity : "medium",
-      summary: obj.summary ?? "",
-      suspectedFiles: Array.isArray(obj.suspectedFiles) ? obj.suspectedFiles : [],
-    };
-  } catch {
-    return { severity: "medium", summary: "(unparseable)", suspectedFiles: [] };
-  }
 }

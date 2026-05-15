@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseTriageJson } from "./classify";
+import { parseTriageJson } from "./parse-triage";
 
 describe("parseTriageJson", () => {
   it("parses a well-formed json response", () => {

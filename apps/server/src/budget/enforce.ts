@@ -2,25 +2,13 @@ import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { budgets } from "@sentry-fixer-bot/db/schema/domain";
 import { and, eq, sql } from "drizzle-orm";
+import { type BudgetCheck, decideBudget } from "./decide";
 
-export type BudgetCheck =
-  | { allowed: true }
-  | { allowed: false; reason: "tokens_exceeded" | "cost_exceeded" };
+export type { BudgetCheck };
+export { decideBudget };
 
 function today(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-}
-
-/** Pure decision: given today's usage + caps, is one more run allowed? */
-export function decideBudget(input: {
-  usedTokens: number;
-  usedCostCents: number;
-  capTokens: number;
-  capCostCents: number;
-}): BudgetCheck {
-  if (input.usedTokens >= input.capTokens) return { allowed: false, reason: "tokens_exceeded" };
-  if (input.usedCostCents >= input.capCostCents) return { allowed: false, reason: "cost_exceeded" };
-  return { allowed: true };
 }
 
 /** Read caps from repos_config, read today's budget row, decide. */
