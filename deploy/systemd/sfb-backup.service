@@ -1,0 +1,8 @@
+[Unit]
+Description=sentry-fixer-bot daily postgres backup to S3
+
+[Service]
+Type=oneshot
+User=sfb-runner
+EnvironmentFile=/etc/sfb/env
+ExecStart=/opt/sfb/current/scripts/backup-db.sh

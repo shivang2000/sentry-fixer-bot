@@ -1,0 +1,22 @@
+[Unit]
+Description=sentry-fixer-bot job worker (triage + agent)
+After=network.target docker.service sfb-server.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=sfb-runner
+WorkingDirectory=/opt/sfb/current
+EnvironmentFile=/etc/sfb/env
+ExecStart=/usr/local/bin/bun apps/server/src/worker/index.ts
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sfb
+
+[Install]
+WantedBy=multi-user.target
