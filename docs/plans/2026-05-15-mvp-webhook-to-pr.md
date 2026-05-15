@@ -4,9 +4,9 @@
 
 **Goal:** Ship a deployable EC2 service that completes the entire loop without any skips: receive Sentry webhook → verify HMAC → deduplicate → archive payload → triage with Claude Haiku → comment on Sentry issue → clone the target GitHub repo → spawn Claude Code in a per-run worktree → let the agent inspect and fix → run the repo's test command → commit, push, and open a pull request (draft if tests fail) → record cost and audit.
 
-**Architecture:** Node 20 + TypeScript service running two processes (web, worker) under systemd. Postgres for state and queue (pg-boss). Hono as the HTTP framework. Claude Code CLI spawned headless per run with `--dangerously-skip-permissions`. GitHub App used for authentication. PRs opened via the `gh` CLI. Strict-mode TypeScript, zod-validated env, pino logging. TDD with vitest; integration tests run against a real Postgres provided by docker-compose; agent end-to-end test exercises a tiny fixture repo on disk with stub `claude` and `gh` binaries.
+**Architecture:** **Bun 1.x** + TypeScript service running two processes (web, worker) under systemd. Postgres for state and queue (pg-boss). Hono as the HTTP framework. Claude Code CLI spawned headless per run with `--dangerously-skip-permissions`. GitHub App used for authentication. PRs opened via the `gh` CLI. Strict-mode TypeScript, zod-validated env, pino logging. TDD with `bun:test`; integration tests run against a real Postgres provided by docker-compose; agent end-to-end test exercises a tiny fixture repo on disk with stub `claude` and `gh` binaries.
 
-**Tech Stack:** Node 20, TypeScript 5.7, Hono 4, pg 8, pg-boss 9, zod 3, pino 9, `@anthropic-ai/sdk` 0.30, `@aws-sdk/client-s3` 3, `@octokit/auth-app` 7, `js-yaml` 4, `execa` 9, vitest 2, `nock` 13. Local toolchain on EC2: `git`, `gh` (GitHub CLI), `claude` (Claude Code CLI), `openssl` (for the local-dev seed script).
+**Tech Stack:** **Bun 1.x** (runtime + package manager + test runner + TS executor), TypeScript 5.7, Hono 4, pg 8, pg-boss 9, zod 3, pino 9, `@anthropic-ai/sdk` 0.30, `@aws-sdk/client-s3` 3, `@octokit/auth-app` 7, `js-yaml` 4, `nock` 13. Local toolchain on EC2: `bun`, `git`, `gh` (GitHub CLI), `claude` (Claude Code CLI), `openssl`. No `node`/`pnpm`/`tsx`/`vitest` installed — Bun replaces all four.
 
 **What is in scope for MVP:** every step from webhook to merged-able pull request, including budget enforcement that hard-stops when a daily cap is hit.
 
@@ -24,7 +24,7 @@ sentry-fixer-bot/
 ├── tsconfig.json                      Task 2
 ├── .eslintrc.cjs                      Task 3
 ├── .prettierrc                        Task 3
-├── vitest.config.ts                   Task 4
+├── bunfig.toml                        Task 4
 ├── docker-compose.yml                 Task 5
 ├── .env.example                       Task 6
 ├── .gitignore                         Task 1
@@ -119,13 +119,9 @@ Before writing any code, every developer working on this repo (and the EC2 build
 ### macOS / Linux install
 
 ```bash
-# Node 20+ (managed via nvm recommended)
-nvm install 20
-nvm use 20
-
-# pnpm 9
-corepack enable
-corepack prepare pnpm@9.15.4 --activate
+# Bun 1.x (runtime + package manager + test runner + TS executor — replaces node+pnpm+tsx+vitest)
+curl -fsSL https://bun.sh/install | bash
+# Reload shell so $HOME/.bun/bin is on PATH.
 
 # Docker + docker compose v2 plugin
 # macOS: install Docker Desktop
@@ -140,7 +136,7 @@ git --version
 gh --version
 
 # Claude Code CLI
-#   npm i -g @anthropic-ai/claude-code
+#   bun install -g @anthropic-ai/claude-code
 #   or:  curl -fsSL https://claude.ai/install.sh | bash   (vendor-provided installer)
 claude --version
 
@@ -152,8 +148,7 @@ aws --version
 ### Verify versions
 
 ```bash
-node --version              # v20.x or higher
-pnpm --version              # 9.x
+bun --version               # 1.1.x or higher
 docker --version
 docker compose version
 git --version               # 2.30 or higher (recommended)
@@ -161,6 +156,8 @@ gh --version                # 2.40 or higher
 claude --version
 aws --version               # aws-cli/2.x
 ```
+
+**Note**: There is intentionally no `node` / `pnpm` / `tsx` / `vitest` install step. Bun ships its own JS runtime, package manager, TypeScript executor, and test runner. Installing Node alongside Bun is fine for personal workflows but the bot does not need it.
 
 ### Authenticate `gh` for local development
 
@@ -235,26 +232,24 @@ This task produces no commit. Move on to Task 1.
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "bun": ">=1.1" },
   "scripts": {
-    "dev": "tsx watch src/index.ts web",
-    "dev:worker": "tsx watch src/index.ts worker",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "eslint src tests",
-    "format": "prettier --write src tests",
-    "db:migrate": "tsx src/db/migrate.ts",
+    "dev": "bun --watch src/index.ts web",
+    "dev:worker": "bun --watch src/index.ts worker",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "bun x eslint src tests",
+    "format": "bun x prettier --write src tests",
+    "typecheck": "bun x tsc --noEmit",
+    "db:migrate": "bun run src/db/migrate.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@aws-sdk/client-s3": "^3.700.0",
-    "@hono/node-server": "^1.13.0",
     "@octokit/auth-app": "^7.1.0",
-    "execa": "^9.5.0",
     "hono": "^4.6.0",
     "js-yaml": "^4.1.0",
     "pg": "^8.13.0",
@@ -263,20 +258,25 @@ This task produces no commit. Move on to Task 1.
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.17.0",
     "@types/pg": "^8.11.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "eslint": "^9.16.0",
     "nock": "^13.5.0",
     "prettier": "^3.4.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "typescript": "^5.7.0"
   }
 }
 ```
+
+**Why this is different from a Node project**:
+- No `engines.node`; `engines.bun` instead.
+- No `tsx` or `vitest`: Bun runs TypeScript natively and ships a `bun test` runner.
+- No `@hono/node-server`: Bun has built-in `fetch` server support; Hono picks the Bun adapter automatically.
+- No `execa`: Bun ships `Bun.spawn` / `Bun.$` with the same ergonomics.
+- `@types/bun` replaces `@types/node` for the Bun-specific globals.
 
 - [ ] **Step 2: Create `.gitignore`**
 
@@ -295,13 +295,13 @@ secrets/
 
 - [ ] **Step 3: Install dependencies**
 
-Run: `cd /Users/shivang/dev/sentry-fixer-bot && pnpm install`
+Run: `cd /Users/shivang/dev/sentry-fixer-bot && bun install`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add package.json .gitignore pnpm-lock.yaml
-git commit -m "chore: scaffold package.json for MVP (webhook→PR)"
+git add package.json .gitignore bun.lockb
+git commit -m "chore: scaffold package.json for MVP (webhook→PR, bun runtime)"
 ```
 
 ---
@@ -341,7 +341,7 @@ git commit -m "chore: scaffold package.json for MVP (webhook→PR)"
 
 - [ ] **Step 2: Verify compile**
 
-Run: `pnpm tsc --noEmit`
+Run: `bun run typecheck`
 Expected: exit 0.
 
 - [ ] **Step 3: Commit**
@@ -396,46 +396,35 @@ git commit -m "chore: eslint and prettier"
 
 ---
 
-## Task 4: Vitest config and test setup stub
+## Task 4: Bun test runner config (`bunfig.toml`)
+
+Bun's test runner is built in; there is no `vitest.config.ts`. We only need a minimal `bunfig.toml` to fix the test layout and timeout, plus a setup shim if needed.
 
 **Files:**
-- Create: `/Users/shivang/dev/sentry-fixer-bot/vitest.config.ts`
-- Create: `/Users/shivang/dev/sentry-fixer-bot/tests/helpers/setup.ts`
+- Create: `/Users/shivang/dev/sentry-fixer-bot/bunfig.toml`
 
-- [ ] **Step 1: Write `vitest.config.ts`**
+- [ ] **Step 1: Write `bunfig.toml`**
 
-```ts
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  test: {
-    include: ["tests/**/*.test.ts"],
-    environment: "node",
-    testTimeout: 30_000,
-    pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
-    setupFiles: ["./tests/helpers/setup.ts"],
-  },
-});
+```toml
+[test]
+# Test files are discovered by Bun via *.test.ts pattern; we just set timeout.
+timeout = 30000
+# Run tests serially in a single process so the shared Postgres test DB
+# from helpers/db.ts is not torn down under concurrent runs.
+# Bun uses a single test process per file by default; we additionally pass
+# --no-isolation in scripts when integration tests need cross-file DB state.
 ```
 
-- [ ] **Step 2: Write `tests/helpers/setup.ts`**
+- [ ] **Step 2: Verify Bun's test runner loads**
 
-```ts
-// tests/helpers/setup.ts
-// Vitest setup. Keep this minimal; per-suite setup belongs in helpers/db.ts
-// and individual test files.
-```
+Run: `bun test --bail --rerun-each 0 tests/_does_not_exist.test.ts || true`
+Expected: Bun prints "0 pass / 0 fail" or "no tests found"; either is fine. The point is that `bun test` works.
 
-- [ ] **Step 3: Verify vitest loads**
-
-Run: `pnpm test`
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add vitest.config.ts tests/helpers/setup.ts
-git commit -m "chore: vitest config"
+git add bunfig.toml
+git commit -m "chore: bunfig for test runner"
 ```
 
 ---
@@ -602,7 +591,7 @@ git commit -m "chore: repos.yaml example"
 
 ```ts
 // tests/unit/env.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseEnv } from "../../src/env.js";
 
 const validEnv = {
@@ -647,7 +636,7 @@ describe("parseEnv", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/env.test.ts`
+Run: `bun test tests/unit/env.test.ts`
 
 - [ ] **Step 3: Implement `src/env.ts`**
 
@@ -691,7 +680,7 @@ export function env(): Env {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/env.test.ts`
+Run: `bun test tests/unit/env.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -929,7 +918,7 @@ DATABASE_URL=postgres://sfb:sfb@localhost:5433/sfb \
 SENTRY_WEBHOOK_SECRET=x SENTRY_API_TOKEN=x SENTRY_ORG_SLUG=x \
 ANTHROPIC_API_KEY=x S3_BUCKET=x S3_REGION=us-east-1 \
 GITHUB_APP_ID=1 GITHUB_APP_PRIVATE_KEY_PATH=./k.pem GITHUB_APP_INSTALLATION_ID=1 \
-NODE_ENV=test pnpm db:migrate
+NODE_ENV=test bun run db:migrate
 ```
 Expected: `migration applied`. `docker compose exec postgres psql -U sfb -d sfb -c "\dt"` lists `alerts`, `runs`, `prs`, `budgets`. Re-run to confirm idempotency.
 
@@ -983,7 +972,7 @@ git commit -m "test: db lifecycle helper"
 
 ```ts
 // tests/unit/repos-config.test.ts
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1031,7 +1020,7 @@ describe("loadReposConfig", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/repos-config.test.ts`
+Run: `bun test tests/unit/repos-config.test.ts`
 
 - [ ] **Step 3: Implement `src/config/repos.ts`**
 
@@ -1089,7 +1078,7 @@ export function severityAtLeast(actual: SeverityValue, threshold: SeverityValue)
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/repos-config.test.ts`
+Run: `bun test tests/unit/repos-config.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1157,7 +1146,7 @@ git commit -m "feat(web): hono app factory"
 
 ```ts
 // tests/integration/health.test.ts
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createApp } from "../../src/web/server.js";
 import { mountHealth } from "../../src/web/routes/health.js";
 import { setupTestDb, teardownTestDb } from "../helpers/db.js";
@@ -1177,7 +1166,7 @@ describe("GET /healthz", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/integration/health.test.ts`
+Run: `bun test tests/integration/health.test.ts`
 
 - [ ] **Step 3: Implement `src/web/routes/health.ts`**
 
@@ -1198,7 +1187,7 @@ export function mountHealth(app: Hono): void {
 
 - [ ] **Step 4: Run test (PASS)**
 
-Run: `pnpm test tests/integration/health.test.ts`
+Run: `bun test tests/integration/health.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1219,7 +1208,7 @@ git commit -m "feat(web): /healthz"
 
 ```ts
 // tests/unit/verify-hmac.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { createHmac } from "node:crypto";
 import { verifySentrySignature } from "../../src/web/verify-hmac.js";
 
@@ -1252,7 +1241,7 @@ describe("verifySentrySignature", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/verify-hmac.test.ts`
+Run: `bun test tests/unit/verify-hmac.test.ts`
 
 - [ ] **Step 3: Implement `src/web/verify-hmac.ts`**
 
@@ -1274,7 +1263,7 @@ export function verifySentrySignature(body: string, signature: string, secret: s
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/verify-hmac.test.ts`
+Run: `bun test tests/unit/verify-hmac.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1362,7 +1351,7 @@ git commit -m "test: sentry payload fixture"
 
 ```ts
 // tests/unit/dedup-key.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { computeDedupKey } from "../../src/alerts/dedup-key.js";
 
 describe("computeDedupKey", () => {
@@ -1393,7 +1382,7 @@ describe("computeDedupKey", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/dedup-key.test.ts`
+Run: `bun test tests/unit/dedup-key.test.ts`
 
 - [ ] **Step 3: Implement `src/alerts/dedup-key.ts`**
 
@@ -1413,7 +1402,7 @@ export function computeDedupKey(input: DedupInput): string {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/dedup-key.test.ts`
+Run: `bun test tests/unit/dedup-key.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1434,7 +1423,7 @@ git commit -m "feat(alerts): dedup key"
 
 ```ts
 // tests/integration/alert-persist.test.ts
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../helpers/db.js";
 import { db } from "../../src/db/client.js";
 import { upsertAlert } from "../../src/alerts/persist.js";
@@ -1473,7 +1462,7 @@ describe("upsertAlert", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/integration/alert-persist.test.ts`
+Run: `bun test tests/integration/alert-persist.test.ts`
 
 - [ ] **Step 3: Implement `src/alerts/persist.ts`**
 
@@ -1519,7 +1508,7 @@ export async function upsertAlert(input: AlertInput): Promise<AlertUpsertResult>
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/integration/alert-persist.test.ts`
+Run: `bun test tests/integration/alert-persist.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1613,7 +1602,7 @@ git commit -m "feat(archive): s3 helpers"
 
 ```ts
 // tests/integration/webhook.test.ts
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, mock, spyOn } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../helpers/db.js";
 import { db } from "../../src/db/client.js";
 import { createApp } from "../../src/web/server.js";
@@ -1622,12 +1611,12 @@ import { makeSentryPayload, signPayload } from "../helpers/fixtures.js";
 
 const SECRET = "test-secret";
 
-vi.mock("../../src/archive/s3.js", () => ({
-  archiveSentryPayloadSafe: vi.fn(async ({ alertId }: { alertId: string }) => `s3://test/${alertId}.json`),
-  archiveRunLog: vi.fn(async () => "s3://test/log"),
+mock.module("../../src/archive/s3.js", () => ({
+  archiveSentryPayloadSafe: mock(async ({ alertId }: { alertId: string }) => `s3://test/${alertId}.json`),
+  archiveRunLog: mock(async () => "s3://test/log"),
 }));
 
-const enqueueTriage = vi.fn(async (_alertId: string) => "job-id");
+const enqueueTriage = mock(async (_alertId: string) => "job-id");
 
 beforeAll(async () => { process.env.SENTRY_WEBHOOK_SECRET = SECRET; });
 beforeEach(async () => { await setupTestDb(); enqueueTriage.mockClear(); });
@@ -1697,7 +1686,7 @@ describe("POST /webhooks/sentry", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/integration/webhook.test.ts`
+Run: `bun test tests/integration/webhook.test.ts`
 
 - [ ] **Step 3: Implement `src/web/routes/sentry-webhook.ts`**
 
@@ -1783,7 +1772,7 @@ export function mountSentryWebhook(app: Hono, deps: Deps = {}): void {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/integration/webhook.test.ts`
+Run: `bun test tests/integration/webhook.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1904,7 +1893,7 @@ git commit -m "feat(queue): triage and agent jobs"
 
 ```ts
 // tests/unit/sentry-client.test.ts
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import nock from "nock";
 import { fetchLatestEvent } from "../../src/sentry/client.js";
 
@@ -1931,7 +1920,7 @@ describe("fetchLatestEvent", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/sentry-client.test.ts`
+Run: `bun test tests/unit/sentry-client.test.ts`
 
 - [ ] **Step 3: Implement `src/sentry/client.ts`**
 
@@ -1972,7 +1961,7 @@ export function extractStackTrace(event: SentryEvent): string {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/sentry-client.test.ts`
+Run: `bun test tests/unit/sentry-client.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -1993,12 +1982,12 @@ git commit -m "feat(sentry): rest client + stack extract"
 
 ```ts
 // tests/unit/classify.test.ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, mock, spyOn } from "bun:test";
 
-vi.mock("@anthropic-ai/sdk", () => ({
+mock.module("@anthropic-ai/sdk", () => ({
   default: class {
     messages = {
-      create: vi.fn(async () => ({
+      create: mock(async () => ({
         id: "msg_1",
         content: [{
           type: "tool_use",
@@ -2031,7 +2020,7 @@ describe("classify", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/classify.test.ts`
+Run: `bun test tests/unit/classify.test.ts`
 
 - [ ] **Step 3: Implement `src/triage/classify.ts`**
 
@@ -2123,7 +2112,7 @@ export async function classify(input: TriageInput): Promise<TriageOutput> {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/classify.test.ts`
+Run: `bun test tests/unit/classify.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -2144,7 +2133,7 @@ git commit -m "feat(triage): haiku classifier"
 
 ```ts
 // tests/unit/sentry-comment.test.ts
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "bun:test";
 import nock from "nock";
 import { postTriageComment } from "../../src/sentry/comment.js";
 
@@ -2164,7 +2153,7 @@ describe("postTriageComment", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/sentry-comment.test.ts`
+Run: `bun test tests/unit/sentry-comment.test.ts`
 
 - [ ] **Step 3: Implement `src/sentry/comment.ts`**
 
@@ -2193,7 +2182,7 @@ export async function postTriageComment(input: CommentInput): Promise<void> {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/sentry-comment.test.ts`
+Run: `bun test tests/unit/sentry-comment.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -2328,7 +2317,7 @@ git commit -m "feat(runs): persist + getRun"
 
 ```ts
 // tests/unit/budget.test.ts
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../helpers/db.js";
 import { db } from "../../src/db/client.js";
 import { checkBudget, recordBudgetSpend } from "../../src/budget/enforce.js";
@@ -2368,7 +2357,7 @@ describe("budget", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/budget.test.ts`
+Run: `bun test tests/unit/budget.test.ts`
 
 - [ ] **Step 3: Implement `src/budget/enforce.ts`**
 
@@ -2426,7 +2415,7 @@ export async function recordBudgetSpend(input: BudgetSpendInput): Promise<void> 
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/budget.test.ts`
+Run: `bun test tests/unit/budget.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -2565,7 +2554,7 @@ git commit -m "feat(agent): workspace clone/branch/cleanup"
 
 ```ts
 // tests/unit/prompt.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { buildAgentPrompt } from "../../src/agent/prompt.js";
 
 describe("buildAgentPrompt", () => {
@@ -2606,7 +2595,7 @@ describe("buildAgentPrompt", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/prompt.test.ts`
+Run: `bun test tests/unit/prompt.test.ts`
 
 - [ ] **Step 3: Implement `src/agent/prompt.ts`**
 
@@ -2689,7 +2678,7 @@ Go.`;
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/prompt.test.ts`
+Run: `bun test tests/unit/prompt.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -2778,7 +2767,7 @@ git commit -m "feat(agent): claude code spawn"
 
 ```ts
 // tests/unit/parse-output.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseAgentOutput } from "../../src/agent/parse-output.js";
 
 describe("parseAgentOutput", () => {
@@ -2818,7 +2807,7 @@ Callers may rely on the thrown error.
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/parse-output.test.ts`
+Run: `bun test tests/unit/parse-output.test.ts`
 
 - [ ] **Step 3: Implement `src/agent/parse-output.ts`**
 
@@ -2859,7 +2848,7 @@ export function parseAgentOutput(stdout: string): ParsedAgentOutput {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/parse-output.test.ts`
+Run: `bun test tests/unit/parse-output.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -2880,7 +2869,7 @@ git commit -m "feat(agent): output parser"
 
 ```ts
 // tests/unit/secret-scan.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { scanFilesForSecrets } from "../../src/agent/secret-scan.js";
 
 describe("scanFilesForSecrets", () => {
@@ -2893,7 +2882,7 @@ describe("scanFilesForSecrets", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/unit/secret-scan.test.ts`
+Run: `bun test tests/unit/secret-scan.test.ts`
 
 - [ ] **Step 3: Implement `src/agent/secret-scan.ts`**
 
@@ -2917,7 +2906,7 @@ export function scanFilesForSecrets(files: string[]): string[] {
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/unit/secret-scan.test.ts`
+Run: `bun test tests/unit/secret-scan.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -3400,7 +3389,7 @@ git commit -m "feat(worker): register handlers"
 
 ```ts
 // tests/integration/triage-job.test.ts
-import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, mock, spyOn } from "bun:test";
 import { setupTestDb, teardownTestDb } from "../helpers/db.js";
 import { db } from "../../src/db/client.js";
 import { upsertAlert } from "../../src/alerts/persist.js";
@@ -3417,14 +3406,14 @@ describe("handleTriageJob", () => {
       firstSeenAt: new Date(), lastSeenAt: new Date(),
       rawPayloadS3: "s3://x",
     });
-    const fetchEvent = vi.fn(async () => ({ eventID: "e", entries: [], tags: [] }));
-    const classifier = vi.fn(async () => ({
+    const fetchEvent = mock(async () => ({ eventID: "e", entries: [], tags: [] }));
+    const classifier = mock(async () => ({
       severity: "high" as const, summary: "null deref",
       suspectedFiles: ["src/a.ts"], confidence: 0.9,
       tokensIn: 500, tokensOut: 100,
     }));
-    const postComment = vi.fn(async () => {});
-    const enqueueAgent = vi.fn(async (_runId: string) => "job-id");
+    const postComment = mock(async () => {});
+    const enqueueAgent = mock(async (_runId: string) => "job-id");
 
     await handleTriageJob(
       { alertId: alert.id },
@@ -3444,10 +3433,10 @@ describe("handleTriageJob", () => {
       codeVersion: null, dedupKey: "k2", title: "x", level: "error",
       firstSeenAt: new Date(), lastSeenAt: new Date(), rawPayloadS3: "s3://x",
     });
-    const fetchEvent = vi.fn(async () => ({ eventID: "x", entries: [], tags: [] }));
-    const classifier = vi.fn(async () => { throw new Error("api down"); });
-    const postComment = vi.fn(async () => {});
-    const enqueueAgent = vi.fn(async () => "job");
+    const fetchEvent = mock(async () => ({ eventID: "x", entries: [], tags: [] }));
+    const classifier = mock(async () => { throw new Error("api down"); });
+    const postComment = mock(async () => {});
+    const enqueueAgent = mock(async () => "job");
     await expect(
       handleTriageJob({ alertId: alert.id }, { fetchEvent, classifier, postComment, enqueueAgent }),
     ).rejects.toThrow(/api down/);
@@ -3461,7 +3450,7 @@ describe("handleTriageJob", () => {
 
 - [ ] **Step 2: Run test (FAIL)**
 
-Run: `pnpm test tests/integration/triage-job.test.ts`
+Run: `bun test tests/integration/triage-job.test.ts`
 
 - [ ] **Step 3: Implement `src/worker/triage-job.ts`**
 
@@ -3561,7 +3550,7 @@ export async function handleTriageJob(
 
 - [ ] **Step 4: Run tests (PASS)**
 
-Run: `pnpm test tests/integration/triage-job.test.ts`
+Run: `bun test tests/integration/triage-job.test.ts`
 
 - [ ] **Step 5: Commit**
 
@@ -3575,7 +3564,7 @@ git commit -m "feat(worker): triage → agent handoff"
 ## **Review checkpoint A — Triage path complete**
 
 Verify before continuing:
-- `pnpm test` all green
+- `bun test` all green
 - DB has `alerts`, `runs`, `prs`, `budgets`, `pgboss` schema
 - A webhook → DB alert → triage handler → comment → agent job enqueued
 
@@ -3603,7 +3592,7 @@ type Mode = "web" | "worker";
 function parseMode(argv: string[]): Mode {
   const arg = argv[2];
   if (arg === "web" || arg === "worker") return arg;
-  log.error({ argv }, "usage: node dist/index.js <web|worker>");
+  log.error({ argv }, "usage: bun src/index.ts <web|worker>");
   process.exit(2);
 }
 
@@ -3641,10 +3630,10 @@ PORT=3000 DATABASE_URL=postgres://sfb:sfb@localhost:5433/sfb \
 SENTRY_WEBHOOK_SECRET=test SENTRY_API_TOKEN=test SENTRY_ORG_SLUG=acme \
 ANTHROPIC_API_KEY=test S3_BUCKET=sfb-archives-dev S3_REGION=us-east-1 \
 GITHUB_APP_ID=1 GITHUB_APP_PRIVATE_KEY_PATH=./secrets/key.pem GITHUB_APP_INSTALLATION_ID=1 \
-NODE_ENV=development pnpm dev
+NODE_ENV=development bun run dev
 ```
 In another terminal: `curl -sf http://localhost:3000/healthz` → `{"ok":true,"db":true}`.
-Then: `pnpm dev:worker` (same env) → log `worker registered triage + agent handlers`.
+Then: `bun run dev:worker` (same env) → log `worker registered triage + agent handlers`.
 
 - [ ] **Step 3: Commit**
 
@@ -3673,7 +3662,7 @@ Type=simple
 User=sfb-runner
 WorkingDirectory=/opt/sfb/current
 EnvironmentFile=/etc/sfb/env
-ExecStart=/usr/bin/node dist/index.js web
+ExecStart=/usr/local/bin/bun src/index.ts web
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
@@ -3699,7 +3688,7 @@ Type=simple
 User=sfb-runner
 WorkingDirectory=/opt/sfb/current
 EnvironmentFile=/etc/sfb/env
-ExecStart=/usr/bin/node dist/index.js worker
+ExecStart=/usr/local/bin/bun src/index.ts worker
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
@@ -3907,8 +3896,6 @@ The EC2 instance running the bot needs the same binaries the local toolchain (Ta
 # EC2 host bootstrap. Idempotent. Targets Ubuntu 24.04 LTS on x86_64 or arm64.
 set -euo pipefail
 
-NODE_MAJOR=20
-
 # 1. Base packages
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -3917,13 +3904,15 @@ apt-get install -y \
   git openssl jq unzip xxd \
   postgresql-client          # gives `pg_dump` for the local backup runner
 
-# 2. Node.js 20 (NodeSource)
-if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q "^v${NODE_MAJOR}\."; then
-  curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
-  apt-get install -y nodejs
+# 2. Bun 1.x — replaces node + pnpm + tsx + vitest.
+# Install system-wide at /usr/local so systemd units can ExecStart it via
+# absolute path without needing per-user PATH.
+if ! command -v bun >/dev/null 2>&1; then
+  TMP=$(mktemp -d)
+  curl -fsSL https://bun.sh/install -o "$TMP/install.sh"
+  BUN_INSTALL=/usr/local bash "$TMP/install.sh"
+  rm -rf "$TMP"
 fi
-corepack enable
-corepack prepare pnpm@9.15.4 --activate
 
 # 3. Docker + compose v2 plugin (from Docker's apt repo)
 if ! command -v docker >/dev/null 2>&1; then
@@ -3972,7 +3961,7 @@ fi
 
 # 6. Claude Code CLI (vendored npm install)
 if ! command -v claude >/dev/null 2>&1; then
-  npm install -g @anthropic-ai/claude-code
+  bun install -g @anthropic-ai/claude-code
 fi
 
 # 7. sfb-runner system user (low-priv, no shell login, no sudo)
@@ -3988,8 +3977,6 @@ chmod 0700 /etc/sfb
 
 # 9. Verify
 echo "--- versions ---"
-node --version
-pnpm --version
 docker --version
 docker compose version
 git --version
@@ -4043,11 +4030,11 @@ Option B — userdata at launch:
 
 ## What gets installed
 
-- Node 20 + pnpm 9
+- Bun 1.x (system-wide at /usr/local/bin/bun) — replaces node, pnpm, tsx, vitest
 - Docker Engine + compose v2 plugin
 - GitHub CLI (`gh`)
 - AWS CLI v2
-- Claude Code CLI (`claude`) via npm global
+- Claude Code CLI (`claude`) via `bun install -g`
 - `git`, `openssl`, `xxd`, `jq`, `postgresql-client`
 - System user `sfb-runner` (uid 4000, nologin, no sudo)
 - Directories: `/opt/sfb`, `/etc/sfb` (0700), `/var/lib/sfb/{work,logs}`
@@ -4186,7 +4173,7 @@ This test exercises `handleAgentJob` end-to-end. It uses a temporary bare git re
 
 ```ts
 // tests/integration/agent-job.test.ts
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, mock, spyOn } from "bun:test";
 import { mkdtemp, writeFile, mkdir, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -4196,26 +4183,26 @@ import { db } from "../../src/db/client.js";
 import { upsertAlert } from "../../src/alerts/persist.js";
 import { createRun, updateRun } from "../../src/runs/persist.js";
 
-vi.mock("../../src/archive/s3.js", () => ({
-  archiveSentryPayloadSafe: vi.fn(async () => "s3://fake/payload"),
-  archiveRunLog: vi.fn(async () => "s3://fake/log"),
+mock.module("../../src/archive/s3.js", () => ({
+  archiveSentryPayloadSafe: mock(async () => "s3://fake/payload"),
+  archiveRunLog: mock(async () => "s3://fake/log"),
 }));
 
-vi.mock("../../src/sentry/comment.js", () => ({
-  postTriageComment: vi.fn(async () => {}),
+mock.module("../../src/sentry/comment.js", () => ({
+  postTriageComment: mock(async () => {}),
 }));
 
-vi.mock("../../src/github/app-auth.js", () => ({
-  getInstallationToken: vi.fn(async () => "fake-installation-token"),
-  __resetForTest: vi.fn(),
+mock.module("../../src/github/app-auth.js", () => ({
+  getInstallationToken: mock(async () => "fake-installation-token"),
+  __resetForTest: mock(),
 }));
 
-vi.mock("../../src/config/repos.js", async () => {
-  const actual = await vi.importActual<typeof import("../../src/config/repos.js")>(
-    "../../src/config/repos.js",
-  );
-  return { ...actual, repoForProject: vi.fn() };
-});
+// Bun has no vi.importActual; load the real module before mocking, then spread it.
+const _actualRepos = await import("../../src/config/repos.js");
+mock.module("../../src/config/repos.js", () => ({
+  ..._actualRepos,
+  repoForProject: mock(),
+}));
 
 let bareRepo: string;
 let workRoot: string;
@@ -4271,7 +4258,7 @@ echo "https://github.com/example/fixture/pull/42"
 
 beforeEach(async () => {
   await setupTestDb();
-  vi.mocked(configMod.repoForProject).mockResolvedValue({
+  (configMod.repoForProject).mockResolvedValue({
     sentry_project: "p",
     github: "example/fixture",
     default_branch: "main",
@@ -4353,7 +4340,7 @@ describe("handleAgentJob (e2e with local fixture)", () => {
 
 - [ ] **Step 2: Run the integration test**
 
-Run: `pnpm test tests/integration/agent-job.test.ts`
+Run: `bun test tests/integration/agent-job.test.ts`
 
 - [ ] **Step 3: Commit**
 
@@ -4367,8 +4354,8 @@ git commit -m "test: e2e agent job with fixture repo + stub binaries"
 ## **Review checkpoint B — Full MVP pipeline**
 
 Verify:
-- `pnpm test` fully green
-- `pnpm build` produces `dist/`
+- `bun test` fully green
+- `bun run build` produces `dist/`
 - Local end-to-end via Task 47 verification
 
 ---
@@ -4382,7 +4369,7 @@ Not a code task. The gate that says "MVP is done."
 ```bash
 docker compose down -v
 ./scripts/dev-up.sh
-pnpm db:migrate
+bun run db:migrate
 ```
 
 - [ ] **Step 2: Configure secrets**
@@ -4394,8 +4381,8 @@ pnpm db:migrate
 
 - [ ] **Step 3: Start the bot**
 
-Terminal 1: `pnpm dev`
-Terminal 2: `pnpm dev:worker`
+Terminal 1: `bun run dev`
+Terminal 2: `bun run dev:worker`
 
 - [ ] **Step 4: Trigger a real alert**
 
@@ -4452,7 +4439,7 @@ Paste into the deploy PR body:
 - [ ] **Step 1: Full suite green**
 
 ```bash
-pnpm test && pnpm lint && pnpm build
+bun test && bun run lint && bun run typecheck
 ```
 
 - [ ] **Step 2: Tag**

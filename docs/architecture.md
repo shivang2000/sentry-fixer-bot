@@ -67,7 +67,7 @@ This document describes the **how**. For the **what** and **why**, see [`design.
 
 ## 2. Process model
 
-Three long-running Node processes managed by systemd:
+Two long-running Bun processes managed by systemd:
 
 | Process | Purpose | Concurrency |
 | --- | --- | --- |
@@ -423,7 +423,7 @@ This bot will never merge its own PRs.
 
 | Choice | Reason | What it costs |
 | --- | --- | --- |
-| **Node 20 + TypeScript** | Reuses team skills, large ecosystem, good GitHub/Sentry SDKs | Slightly higher RAM than Go for the worker |
+| **Bun 1.x + TypeScript** | Reuses team skills, large ecosystem, good GitHub/Sentry SDKs | Slightly higher RAM than Go for the worker |
 | **Hono over Express** | 4× faster, smaller bundle, better typing | Less middleware ecosystem |
 | **pg-boss over BullMQ** | One less daemon (no Redis), transactional `enqueue on insert` | Lower throughput ceiling (~1k/s vs 50k/s — fine for our load) |
 | **Postgres over SQLite** | Multi-process safe (web + worker), pg-boss requires Postgres | More ops than embedded DB |

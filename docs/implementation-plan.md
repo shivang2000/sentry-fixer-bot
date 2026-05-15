@@ -126,7 +126,7 @@ Webhook ingestion and dedup are the riskiest correctness paths. Get them battle-
 
 ### Exit criteria (Phase 1 done means all of these are true)
 
-- `pnpm dev` starts web + worker locally; `./scripts/seed-fake-alert.sh` triggers a triage end-to-end and adds a comment to a real Sentry issue (or a fake one in test mode)
+- `bun run dev` starts web + worker locally; `./scripts/seed-fake-alert.sh` triggers a triage end-to-end and adds a comment to a real Sentry issue (or a fake one in test mode)
 - HMAC verification rejects unsigned and tampered payloads (unit test)
 - Dedup correctly collapses 1000 identical webhooks to a single `alerts` row (load test)
 - Health endpoint returns 200 with subsystem statuses
@@ -255,7 +255,7 @@ Webhook ingestion and dedup are the riskiest correctness paths. Get them battle-
 
 ### Deployment
 
-- Infrastructure-as-code: AWS CDK (Node) at `deploy/aws-cdk/`
+- Infrastructure-as-code: AWS CDK (TypeScript, Bun-runtime) at `deploy/aws-cdk/`
 - AMI built nightly with packer; bot deployed via systemd update on AMI swap
 - Zero-downtime not required (Sentry retries webhooks)
 

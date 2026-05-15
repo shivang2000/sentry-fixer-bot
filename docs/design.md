@@ -153,7 +153,7 @@ Sentry        EC2 bot                                Engineer
 | Postgres only (no Redis) | Operational simplicity | Use `pg-boss` for queue, not BullMQ |
 | GitHub-only repo hosting | Tool ecosystem | Use `gh` CLI; GitLab/Bitbucket not supported V1 |
 | Anthropic Claude only | LLM provider choice | No model fallback to OpenAI/local in V1 |
-| Node 20+, TypeScript | Team familiarity | No Go/Python rewrite |
+| Bun 1.x, TypeScript | Team familiarity | No Go/Python rewrite |
 | Public webhook endpoint | Sentry requires reachable URL | Need TLS cert, public DNS |
 | Repo test command must be deterministic | Agent uses test result as PR-readiness signal | Flaky test repos → all PRs land as draft |
 
