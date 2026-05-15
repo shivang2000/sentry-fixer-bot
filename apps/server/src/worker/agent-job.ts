@@ -6,6 +6,7 @@ import { prs } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
 import { parseAgentOutput } from "../agent/parse-output";
 import { renderAgentPrompt } from "../agent/prompt";
+import { renderClaudeHome } from "../agent/render-claude-home";
 import { type SecretFinding, scanText } from "../agent/secret-scan";
 import { spawnClaudeAgent } from "../agent/spawn";
 import { createWorkspace } from "../agent/workspace";
@@ -61,7 +62,8 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       testCommand: cfg.testCommand,
     });
 
-    const agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt });
+    const { home, mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });
+    const agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt, home, mcpConfigPath });
     const outcome = parseAgentOutput(agentRes.stdout);
 
     // Secret scan of the diff

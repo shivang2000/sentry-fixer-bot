@@ -101,6 +101,7 @@
       },
       "devDependencies": {
         "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
         "hono": "catalog:",
         "typescript": "catalog:",
       },
