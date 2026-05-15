@@ -3,6 +3,7 @@ import { createContext } from "@sentry-fixer-bot/api/context";
 import { appRouter } from "@sentry-fixer-bot/api/routers/index";
 import { auth } from "@sentry-fixer-bot/auth";
 import { bootstrapLocalTrustedAdmin, maybeEmitClaimUrl } from "@sentry-fixer-bot/auth/bootstrap";
+import { runStartupDoctor } from "@sentry-fixer-bot/auth/doctor";
 import { env } from "@sentry-fixer-bot/env/server";
 import { initLogger } from "evlog";
 import { type BetterAuthInstance, createAuthMiddleware } from "evlog/better-auth";
@@ -16,6 +17,7 @@ initLogger({
 });
 
 await bootstrapLocalTrustedAdmin();
+await runStartupDoctor();
 await maybeEmitClaimUrl();
 
 const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
