@@ -2,6 +2,7 @@ import { trpcServer } from "@hono/trpc-server";
 import { createContext } from "@sentry-fixer-bot/api/context";
 import { appRouter } from "@sentry-fixer-bot/api/routers/index";
 import { auth } from "@sentry-fixer-bot/auth";
+import { bootstrapLocalTrustedAdmin, maybeEmitClaimUrl } from "@sentry-fixer-bot/auth/bootstrap";
 import { env } from "@sentry-fixer-bot/env/server";
 import { initLogger } from "evlog";
 import { type BetterAuthInstance, createAuthMiddleware } from "evlog/better-auth";
@@ -12,6 +13,9 @@ import { cors } from "hono/cors";
 initLogger({
   env: { service: "sentry-fixer-bot-server" },
 });
+
+await bootstrapLocalTrustedAdmin();
+await maybeEmitClaimUrl();
 
 const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
   exclude: ["/api/auth/**"],

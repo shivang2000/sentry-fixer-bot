@@ -54,9 +54,8 @@ export function createAuth() {
           // Gate: allow if no users yet, or email matches bootstrap admin,
           // or there's an unconsumed invite for this email.
           before: async (newUser) => {
-            const [{ count: total }] = await db
-              .select({ count: sql<number>`count(*)::int` })
-              .from(schema.user);
+            const rows = await db.select({ count: sql<number>`count(*)::int` }).from(schema.user);
+            const total = rows[0]?.count ?? 0;
 
             if (total === 0) return; // first signup → allowed (promoted in `after`)
             if (env.SFB_BOOTSTRAP_ADMIN_EMAIL && env.SFB_BOOTSTRAP_ADMIN_EMAIL === newUser.email) {
@@ -73,9 +72,8 @@ export function createAuth() {
           },
           // Post-create: first user becomes instance_admin; otherwise consume invite.
           after: async (createdUser) => {
-            const [{ count: total }] = await db
-              .select({ count: sql<number>`count(*)::int` })
-              .from(schema.user);
+            const rows = await db.select({ count: sql<number>`count(*)::int` }).from(schema.user);
+            const total = rows[0]?.count ?? 0;
 
             if (total === 1) {
               await db
