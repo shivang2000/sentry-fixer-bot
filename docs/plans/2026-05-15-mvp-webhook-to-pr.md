@@ -112,6 +112,115 @@ sentry-fixer-bot/
 
 ---
 
+## Task 0: Local toolchain prerequisites
+
+Before writing any code, every developer working on this repo (and the EC2 build user) needs the following binaries on `PATH`. This is a one-time setup step; it does not produce a commit. The next task scaffolds the Node project on top of these.
+
+### macOS / Linux install
+
+```bash
+# Node 20+ (managed via nvm recommended)
+nvm install 20
+nvm use 20
+
+# pnpm 9
+corepack enable
+corepack prepare pnpm@9.15.4 --activate
+
+# Docker + docker compose v2 plugin
+# macOS: install Docker Desktop
+# Linux: https://docs.docker.com/engine/install/
+
+# git (usually pre-installed)
+git --version
+
+# GitHub CLI
+#   macOS:   brew install gh
+#   Ubuntu:  see https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+gh --version
+
+# Claude Code CLI
+#   npm i -g @anthropic-ai/claude-code
+#   or:  curl -fsSL https://claude.ai/install.sh | bash   (vendor-provided installer)
+claude --version
+
+# AWS CLI v2 (used by backup script in Task 44b and by deploy ops)
+#   https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+aws --version
+```
+
+### Verify versions
+
+```bash
+node --version              # v20.x or higher
+pnpm --version              # 9.x
+docker --version
+docker compose version
+git --version               # 2.30 or higher (recommended)
+gh --version                # 2.40 or higher
+claude --version
+aws --version               # aws-cli/2.x
+```
+
+### Authenticate `gh` for local development
+
+The bot itself uses **GitHub App installation tokens** in production (Task 31 + 38) and does **not** need `gh auth login`. But while developing locally — running ad-hoc `gh` commands to inspect PRs, configure repos, or test branch protection — you want a real `gh auth login`.
+
+```bash
+gh auth login
+# Choose:
+#   - GitHub.com
+#   - HTTPS
+#   - Authenticate with browser
+gh auth status
+# Should show your login + scopes
+```
+
+Then verify access to a test repo:
+
+```bash
+gh repo view your-sandbox-org/test-bot-target
+```
+
+### Authenticate Anthropic for local Claude Code use
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+claude -p "say hello" --print
+# Should print a short response.
+```
+
+The bot passes `ANTHROPIC_API_KEY` through to spawned `claude` processes (Task 34), so the dev shell variable is not used by the bot at runtime — but having it lets you sanity-check the CLI separately.
+
+### `secrets/` directory
+
+Create it now so later tasks have somewhere to drop the GitHub App private key:
+
+```bash
+mkdir -p /Users/shivang/dev/sentry-fixer-bot/secrets
+echo "secrets/" >> /Users/shivang/dev/sentry-fixer-bot/.gitignore.tmp  # if not already
+# (Task 1 adds the .gitignore proper; for now keep `secrets/` out of git manually.)
+```
+
+### Smoke check `gh` + `claude` work in a non-interactive shell
+
+The bot spawns both binaries via `execa` with no TTY. Verify they don't hang waiting for prompts:
+
+```bash
+gh --help < /dev/null > /dev/null      # exits 0
+claude --help < /dev/null > /dev/null  # exits 0
+```
+
+### Done when
+
+- All five `--version` checks pass.
+- `gh auth status` shows logged in.
+- `claude -p "hello"` returns a response.
+
+This task produces no commit. Move on to Task 1.
+
+---
+
 ## Task 1: Repo scaffold and `.gitignore`
 
 **Files:**
@@ -3662,6 +3771,349 @@ server {
 ```bash
 git add deploy/nginx/sfb.conf
 git commit -m "deploy: nginx TLS + rate limit"
+```
+
+---
+
+## Task 44b: Postgres backup to S3 (daily systemd timer)
+
+Because Postgres runs in docker-compose on the EC2 (no RDS snapshots), MVP needs an explicit backup story. One nightly `pg_dump` → S3, retain 30 days.
+
+**Files:**
+- Create: `/Users/shivang/dev/sentry-fixer-bot/scripts/backup-db.sh`
+- Create: `/Users/shivang/dev/sentry-fixer-bot/deploy/systemd/sfb-backup.service`
+- Create: `/Users/shivang/dev/sentry-fixer-bot/deploy/systemd/sfb-backup.timer`
+
+- [ ] **Step 1: Write `scripts/backup-db.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Daily Postgres backup → S3. Run via systemd timer on the EC2 host.
+set -euo pipefail
+
+: "${DATABASE_URL:?must be set}"
+: "${S3_BUCKET:?must be set}"
+: "${BACKUP_RETENTION_DAYS:=30}"
+
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+TMP=$(mktemp -t sfb-backup-XXXXXX.sql.gz)
+trap 'rm -f "$TMP"' EXIT
+
+echo "dumping postgres → $TMP"
+docker compose exec -T postgres pg_dump --no-owner --no-privileges \
+  --dbname="$DATABASE_URL" \
+  | gzip -9 > "$TMP"
+
+KEY="db-backups/$(date -u +%Y/%m)/sfb-${TS}.sql.gz"
+echo "uploading s3://$S3_BUCKET/$KEY"
+aws s3 cp --no-progress "$TMP" "s3://$S3_BUCKET/$KEY" \
+  --metadata "retention-days=$BACKUP_RETENTION_DAYS"
+
+# Trim local list output; lifecycle policy on the bucket handles deletion
+# (set: expiration $BACKUP_RETENTION_DAYS days on `db-backups/` prefix).
+echo "backup complete: $KEY"
+```
+
+- [ ] **Step 2: Write `deploy/systemd/sfb-backup.service`**
+
+```ini
+[Unit]
+Description=sentry-fixer-bot postgres backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/sfb/current
+EnvironmentFile=/etc/sfb/env
+ExecStart=/opt/sfb/current/scripts/backup-db.sh
+StandardOutput=journal
+StandardError=journal
+```
+
+- [ ] **Step 3: Write `deploy/systemd/sfb-backup.timer`**
+
+```ini
+[Unit]
+Description=Run sentry-fixer-bot postgres backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
+```
+
+- [ ] **Step 4: Make executable**
+
+```bash
+chmod +x scripts/backup-db.sh
+```
+
+- [ ] **Step 5: Document the S3 lifecycle policy**
+
+Apply this lifecycle policy to the `S3_BUCKET` (via Terraform/CDK/console — out of scope for code but called out for the deploy runbook):
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-db-backups",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "db-backups/" },
+      "Expiration": { "Days": 30 }
+    }
+  ]
+}
+```
+
+- [ ] **Step 6: Smoke-test backup script locally**
+
+With docker-compose Postgres running:
+```bash
+export DATABASE_URL=postgres://sfb:sfb@localhost:5433/sfb
+export S3_BUCKET=sfb-archives-dev
+./scripts/backup-db.sh
+```
+Expected: log line `backup complete: db-backups/YYYY/MM/sfb-<ts>.sql.gz`. Verify in S3 console or via:
+```bash
+aws s3 ls s3://$S3_BUCKET/db-backups/ --recursive | tail -3
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/backup-db.sh deploy/systemd/sfb-backup.service deploy/systemd/sfb-backup.timer
+git commit -m "deploy: nightly pg_dump backup to S3"
+```
+
+---
+
+## Task 44c: EC2 AMI bootstrap (userdata.sh)
+
+The EC2 instance running the bot needs the same binaries the local toolchain (Task 0) needs, plus Docker and the `sfb-runner` user. Capture this as an idempotent userdata script. Apply by either: (a) running it once via `ssh ubuntu@host bash < userdata.sh` on a fresh instance, or (b) baking an AMI with Packer that runs this at provision time. The bot itself never executes userdata; this is one-time host provisioning.
+
+**Files:**
+- Create: `/Users/shivang/dev/sentry-fixer-bot/deploy/ec2/userdata.sh`
+- Create: `/Users/shivang/dev/sentry-fixer-bot/deploy/ec2/README.md`
+
+- [ ] **Step 1: Write `deploy/ec2/userdata.sh`**
+
+```bash
+#!/usr/bin/env bash
+# EC2 host bootstrap. Idempotent. Targets Ubuntu 24.04 LTS on x86_64 or arm64.
+set -euo pipefail
+
+NODE_MAJOR=20
+
+# 1. Base packages
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y \
+  ca-certificates curl gnupg lsb-release \
+  git openssl jq unzip xxd \
+  postgresql-client          # gives `pg_dump` for the local backup runner
+
+# 2. Node.js 20 (NodeSource)
+if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q "^v${NODE_MAJOR}\."; then
+  curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
+  apt-get install -y nodejs
+fi
+corepack enable
+corepack prepare pnpm@9.15.4 --activate
+
+# 3. Docker + compose v2 plugin (from Docker's apt repo)
+if ! command -v docker >/dev/null 2>&1; then
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  ARCH=$(dpkg --print-architecture)
+  CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+  echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $CODENAME stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -y
+  apt-get install -y docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker
+fi
+
+# 4. GitHub CLI (from cli.github.com apt repo)
+if ! command -v gh >/dev/null 2>&1; then
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) \
+signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] \
+https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list
+  apt-get update -y
+  apt-get install -y gh
+fi
+
+# 5. AWS CLI v2
+if ! command -v aws >/dev/null 2>&1; then
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64) AWS_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" ;;
+    aarch64) AWS_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" ;;
+    *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+  esac
+  TMP=$(mktemp -d)
+  curl -fsSL "$AWS_URL" -o "$TMP/awscli.zip"
+  unzip -q "$TMP/awscli.zip" -d "$TMP"
+  "$TMP/aws/install"
+  rm -rf "$TMP"
+fi
+
+# 6. Claude Code CLI (vendored npm install)
+if ! command -v claude >/dev/null 2>&1; then
+  npm install -g @anthropic-ai/claude-code
+fi
+
+# 7. sfb-runner system user (low-priv, no shell login, no sudo)
+if ! id sfb-runner >/dev/null 2>&1; then
+  useradd --system --uid 4000 --shell /usr/sbin/nologin \
+          --home-dir /var/lib/sfb --create-home sfb-runner
+fi
+
+# 8. Application directories
+mkdir -p /opt/sfb /etc/sfb /var/lib/sfb/work /var/lib/sfb/logs
+chown -R sfb-runner:sfb-runner /var/lib/sfb
+chmod 0700 /etc/sfb
+
+# 9. Verify
+echo "--- versions ---"
+node --version
+pnpm --version
+docker --version
+docker compose version
+git --version
+gh --version
+claude --version
+aws --version
+
+# 10. Note for the operator
+cat <<'EOM'
+BOOTSTRAP COMPLETE.
+
+Next steps (run as root or via your deploy pipeline):
+  1. Sync /etc/sfb/env from AWS Secrets Manager (or scp it).
+     Required keys: see .env.example in the repo.
+  2. Drop /opt/sfb/current/ (the built dist + node_modules + scripts + repos.yaml).
+  3. Place /etc/sfb/github-app.pem (GitHub App private key, mode 0400, owner sfb-runner).
+  4. Place /opt/sfb/repos.yaml.
+  5. Install systemd units:
+       cp /opt/sfb/current/deploy/systemd/sfb-*.{service,timer} /etc/systemd/system/
+       systemctl daemon-reload
+       systemctl enable --now sfb-web.service sfb-worker.service sfb-backup.timer
+  6. Install nginx site:
+       cp /opt/sfb/current/deploy/nginx/sfb.conf /etc/nginx/sites-available/sfb.conf
+       ln -sf /etc/nginx/sites-available/sfb.conf /etc/nginx/sites-enabled/sfb.conf
+       certbot --nginx -d sfb.example.com
+       systemctl reload nginx
+  7. The bot does NOT run `gh auth login`. It uses GitHub App installation tokens
+     minted in src/github/app-auth.ts and passed to `gh` via GH_TOKEN env per
+     spawn. No personal gh credentials live on this box.
+EOM
+```
+
+- [ ] **Step 2: Write `deploy/ec2/README.md`**
+
+```markdown
+# EC2 deploy
+
+This bot runs on a single Ubuntu 24.04 EC2 (t3.medium baseline; resize as load demands).
+
+## Provisioning
+
+Option A — interactive:
+```bash
+ssh ubuntu@<host>
+sudo bash < deploy/ec2/userdata.sh
+```
+
+Option B — userdata at launch:
+1. Paste `userdata.sh` into the EC2 launch wizard's "User data" field, or
+2. Bake an AMI with Packer using `userdata.sh` as the provisioner.
+
+## What gets installed
+
+- Node 20 + pnpm 9
+- Docker Engine + compose v2 plugin
+- GitHub CLI (`gh`)
+- AWS CLI v2
+- Claude Code CLI (`claude`) via npm global
+- `git`, `openssl`, `xxd`, `jq`, `postgresql-client`
+- System user `sfb-runner` (uid 4000, nologin, no sudo)
+- Directories: `/opt/sfb`, `/etc/sfb` (0700), `/var/lib/sfb/{work,logs}`
+
+## What does NOT get installed
+
+- Code (you push it to `/opt/sfb/current/` via your deploy script)
+- `/etc/sfb/env` (synced from Secrets Manager or `scp`'d in by ops)
+- GitHub App private key (placed at `/etc/sfb/github-app.pem`, mode 0400)
+- `repos.yaml` (placed at `/opt/sfb/repos.yaml`, mode 0644)
+- systemd unit files (copied at deploy time and `systemctl daemon-reload`'d)
+
+## GitHub authentication
+
+The bot does NOT use `gh auth login`. It mints **GitHub App installation tokens** via `@octokit/auth-app` (src/github/app-auth.ts) and passes them to `gh` via the `GH_TOKEN` environment variable per subprocess spawn (src/github/pr.ts). Consequences:
+
+- No personal gh credentials live on the EC2.
+- Rotating the GitHub App private key rotates **all** of the bot's GitHub access.
+- The GitHub App must be installed on the target repos (org settings → Integrations → your App → Install).
+- Scopes: `contents: write`, `pull_requests: write`, `metadata: read`. **Do not grant `admin`** — the bot's safety relies on being unable to merge.
+
+## Network egress
+
+Lock down `OUTPUT` chain so the EC2 can only reach:
+- `api.anthropic.com`
+- `api.github.com`, `github.com`
+- `sentry.io`, `*.sentry.io`
+- `registry.npmjs.org` (build only)
+- `169.254.169.254` (EC2 metadata)
+- `s3.amazonaws.com`
+
+See `docs/architecture.md §1` for the full allowlist rationale.
+
+## Postgres backup
+
+`sfb-backup.timer` runs `scripts/backup-db.sh` nightly at 02:00 UTC.
+The S3 bucket lifecycle policy expires backups after 30 days.
+
+## Restoring from backup
+
+```bash
+LATEST=$(aws s3 ls s3://$S3_BUCKET/db-backups/ --recursive | sort | tail -1 | awk '{print $4}')
+aws s3 cp "s3://$S3_BUCKET/$LATEST" - \
+  | gunzip \
+  | docker compose exec -T postgres psql -U sfb -d sfb
+```
+```
+
+- [ ] **Step 3: Make executable**
+
+```bash
+chmod +x deploy/ec2/userdata.sh
+```
+
+- [ ] **Step 4: Smoke-test the script syntax**
+
+```bash
+bash -n deploy/ec2/userdata.sh
+```
+Expected: exit 0 (syntax-only check; does not run anything).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add deploy/ec2/
+git commit -m "deploy: EC2 userdata bootstrap (node, docker, gh, claude, aws cli, sfb-runner)"
 ```
 
 ---

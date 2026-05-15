@@ -30,7 +30,7 @@ This document describes the **how**. For the **what** and **why**, see [`design.
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │  Local services                                                 │    │
-│  │  • Postgres 16 (RDS in prod, local for dev)                     │    │
+│  │  • Postgres 16 (docker-compose on this EC2; EBS-backed volume) │    │
 │  │  • Filesystem: /var/lib/sfb/                                    │    │
 │  │      ├── work/{run_id}/        (per-run git worktrees)          │    │
 │  │      ├── logs/                  (run transcripts, rotated)      │    │
@@ -417,7 +417,7 @@ This bot will never merge its own PRs.
 | Sentry API rate limit | 429 response | Exponential backoff up to 5 min; if still 429, mark triage failed (we still have the webhook payload, just no event detail). |
 | Daily budget exhausted | `budgets.tokens_used >= cap` check before triage | Move to triage-only mode (just classify, comment on Sentry, no agent). |
 | Disk full on /var/lib/sfb | Hourly check by `sfb-cron` | Force-prune oldest worktrees; alert operator. |
-| Postgres disk full | RDS alarm | Manual intervention. Bot stops accepting webhooks (returns 503) until cleared. |
+| Postgres disk full | CloudWatch disk-usage alarm on EBS volume; `df` cron check inside container | Manual intervention. Bot stops accepting webhooks (returns 503) until cleared. Backups via `pg_dump` → S3 daily. |
 
 ## 10. Why these tech choices
 
@@ -426,7 +426,8 @@ This bot will never merge its own PRs.
 | **Node 20 + TypeScript** | Reuses team skills, large ecosystem, good GitHub/Sentry SDKs | Slightly higher RAM than Go for the worker |
 | **Hono over Express** | 4× faster, smaller bundle, better typing | Less middleware ecosystem |
 | **pg-boss over BullMQ** | One less daemon (no Redis), transactional `enqueue on insert` | Lower throughput ceiling (~1k/s vs 50k/s — fine for our load) |
-| **Postgres over SQLite** | Multi-process safe (web + worker + cron), RDS managed | More ops than embedded DB |
+| **Postgres over SQLite** | Multi-process safe (web + worker), pg-boss requires Postgres | More ops than embedded DB |
+| **Self-hosted Postgres (docker-compose) over RDS** | One less AWS service; same EC2 instance; no cross-AZ network hop; cheaper; backups via `pg_dump`→S3 cron | We own patching, HA, disaster recovery; single-AZ |
 | **Claude Code CLI over Anthropic SDK** | Reuses tool surface, prompt caching, dangerously-skip-permissions semantics already debugged | Adds a subprocess hop |
 | **Single EC2 over Lambda** | Long-running agent (5+ min) blows Lambda 15-min limit; cold starts hurt p95; workspace state needs disk | EC2 maintenance, ASG of 1 not 100 |
 | **gh CLI over Octokit** | Handles GitHub App auth refresh, branch creation, PR open with one command. Battle-tested. | Subprocess overhead |

@@ -30,7 +30,7 @@ If the project has 2 engineers, Phases 1 and 2 cannot meaningfully be parallelis
 | --- | --- | --- |
 | Sentry plan with webhooks | Internal Integrations or Webhooks feature; available on Team plan+ | Bot cannot launch; fallback is polling Sentry API on a cron (slower, more API quota burn) |
 | GitHub App for the org | App with `contents: write`, `pull_requests: write`, `metadata: read` scopes installed on target repos | Cannot open PRs; manual personal access token is a worse fallback (PR author shows as a real human) |
-| AWS account access | EC2, RDS, S3, Secrets Manager, IAM | Could deploy elsewhere (Fly.io, Render) with similar architecture |
+| AWS account access | EC2 (incl. EBS volume for Postgres data), S3, Secrets Manager, IAM | Could deploy elsewhere (Fly.io, Render) with similar architecture. No RDS; Postgres runs in docker-compose on the same EC2 instance. |
 | Anthropic API quota | ~$300/month for moderate volume; raise rate limits if alerts spike | Bot pauses; alerts go to triage-only queue |
 | DNS subdomain (e.g. `sfb.example.com`) | A record + TLS cert | Cannot receive webhooks |
 | Slack workspace and incoming-webhook URLs | One per oncall channel | Notifications fall back to email |
@@ -54,7 +54,7 @@ If the project has 2 engineers, Phases 1 and 2 cannot meaningfully be parallelis
 | **Sentry sends webhook storm during incident** | High | Medium (cost + queue depth) | Dedup-first; bounded worker concurrency; alert on queue backlog |
 | **Anthropic outage** | Medium | Medium | Webhook still ack'd; jobs accumulate in queue; resume when API returns |
 | **GitHub outage** | Medium | Medium | `gh pr create` retry with backoff; orphan worktrees cleaned up by cron |
-| **Postgres disk fills** | Low | High | RDS alarms; cron prunes alerts older than 30 days |
+| **Postgres disk fills** | Low | High | CloudWatch disk-usage alarm on EBS volume + container `df` check; cron prunes alerts older than 30 days; nightly `pg_dump` → S3 for recovery |
 | **Bot PR is malicious due to prompt injection** | Low (we control payload) | High | Sanitise Sentry-supplied strings; review-required branch protection means a human still has to approve |
 | **EC2 instance dies during a long run** | Medium | Low | Workspace cleaned on boot; alert auto-retried once via `runs.retry_of` |
 | **Repo has flaky tests, every PR is draft** | High | Low | `tests-flaky` label visible to operators; tune retry count per repo |
@@ -122,7 +122,8 @@ Per-alert cost breakdown (estimates; tune after real data):
 | GitHub API calls | negligible |
 | S3 storage (~10KB payload + 200KB log per alert, 90-day retention) | ~$0.01 per 1000 alerts |
 | EC2 t3.medium | ~$30/month |
-| RDS db.t4g.micro | ~$15/month |
+| Postgres in docker-compose on the same EC2 (no RDS) | $0 extra (covered by EC2) |
+| EBS gp3 volume for Postgres data (50 GB) | ~$4/month |
 | Data transfer | ~$5/month |
 
 Operational scenarios:
@@ -142,7 +143,7 @@ Cost grows with **PR attempts**, not with **webhook volume**, because dedup catc
 | Sentry raw webhook payload | S3 | 90 days | Read via signed URL through admin endpoint |
 | Agent run transcript (stdout/stderr) | S3 | 90 days | Same as above |
 | Code being modified (repo clone) | EC2 disk `/var/lib/sfb/work/` | Deleted at end of run; max 1h if run fails | sfb-runner only |
-| Database rows (alerts, runs, prs) | RDS | 1 year | Engineers via bastion |
+| Database rows (alerts, runs, prs) | Postgres container on EC2 (EBS-backed) | 1 year | Engineers via SSH + `psql` |
 | Slack messages | Slack (their retention) | Per Slack settings | Channel members |
 
 PII concerns:
@@ -182,7 +183,8 @@ This is in addition to the decision log in `design.md`. Anything decided here wh
 | Decision | Rationale |
 | --- | --- |
 | Single us-east-1 region V1 | Cost; Sentry retries cover regional blips |
-| RDS db.t4g.micro start | Cheap; right-size after observing real load |
+| Postgres in docker-compose (no RDS) | Lower cost, fewer services, one-EC2 ceiling; trade-off: we own backups + patching |
+| Nightly `pg_dump` → S3 | Cheap PITR-light backup; restore = pull dump, `psql -f` |
 | Manual repo onboarding (config file) | Avoid registration UI in V1; one config commit per repo |
 | Operator-driven prompt tuning, not auto-RL | Auto-RL adds risk + complexity disproportionate to V1 value |
 | 90-day retention default | Balances incident retrospection with privacy minimisation |
