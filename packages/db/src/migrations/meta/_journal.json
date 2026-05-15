@@ -15,6 +15,13 @@
       "when": 1778860246685,
       "tag": "0001_complex_logan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778860295389,
+      "tag": "0002_wide_veda",
+      "breakpoints": true
     }
   ]
 }
