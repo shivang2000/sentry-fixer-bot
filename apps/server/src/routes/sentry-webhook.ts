@@ -3,6 +3,8 @@ import { Hono } from "hono";
 import { dedupKey } from "../alerts/dedup-key";
 import { upsertAlert } from "../alerts/persist";
 import { archiveJson } from "../archive/s3";
+import { publishJob } from "../queue/boss";
+import { JOB_TRIAGE } from "../queue/jobs";
 import { verifyHmacSha256 } from "../web/verify-hmac";
 
 export const sentryWebhook = new Hono();
@@ -65,6 +67,8 @@ sentryWebhook.post("/webhooks/sentry", async (c) => {
     rawPayloadS3: s3Uri,
   });
 
-  // TODO(D8): enqueue triage job here when pg-boss is wired up.
+  if (isNew) {
+    await publishJob(JOB_TRIAGE, { alertId: id });
+  }
   return c.json({ ok: true, alertId: id, isNew }, 202);
 });
