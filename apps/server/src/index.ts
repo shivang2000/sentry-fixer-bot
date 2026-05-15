@@ -11,6 +11,7 @@ import { type EvlogVariables, evlog } from "evlog/hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { boardClaim } from "./routes/board-claim";
+import { health } from "./routes/health";
 
 initLogger({
   env: { service: "sentry-fixer-bot-server" },
@@ -45,6 +46,7 @@ app.use(
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
+app.route("/", health);
 app.route("/", boardClaim);
 
 app.use(
