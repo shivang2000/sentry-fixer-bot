@@ -1,1 +1,45 @@
+
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+# Better-T-Stack
+# Build outputs
+# Dependencies
+# Environment variables
+# IDEs and editors
+# Logs
+# Misc
+# Testing
+# Turbo
+*.log
+*.swo
+*.swp
+*.tgz
+*.tsbuildinfo
+*~
+.DS_Store
+.alchemy
+.cache
+.env
+.env*.local
+.idea
+.nx
+.nyc_output
 .omc/
+.pnp
+.pnp.js
+.pnpm-debug.log*
+.turbo
+.vscode/*
+build
+coverage
+dist
+lerna-debug.log*
+logs
+node_modules
+npm-debug.log*
+temp
+tmp
+yarn-debug.log*
+yarn-error.log*

@@ -1,0 +1,3 @@
+{
+	"extends": "@sentry-fixer-bot/config/tsconfig.base.json"
+}

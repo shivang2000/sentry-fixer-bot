@@ -1,0 +1,43 @@
+// Better-T-Stack
+//
+// Website: https://www.better-t-stack.dev/
+// Stack Builder: https://www.better-t-stack.dev/new
+// Analytics: https://www.better-t-stack.dev/analytics
+// Showcase: https://www.better-t-stack.dev/showcase
+// Sponsor: https://github.com/sponsors/AmanVarshney01
+//
+// Add new addons with: bun create better-t-stack add
+// This file is safe to delete
+
+{
+  "$schema": "https://r2.better-t-stack.dev/schema.json",
+  "version": "3.28.3",
+  "createdAt": "2026-05-15T15:28:38.868Z",
+  "reproducibleCommand": "bun create better-t-stack@latest sentry-fixer-bot --frontend tanstack-router --backend hono --runtime bun --database postgres --orm drizzle --api trpc --auth better-auth --payments none --addons turborepo biome husky skills mcp evlog --examples none --db-setup docker --web-deploy none --server-deploy none --git --package-manager bun --install",
+  "addonOptions": {
+    "mcp": {
+      "scope": "project",
+      "servers": [],
+      "agents": ["claude-code"],
+    },
+    "skills": {
+      "scope": "project",
+      "agents": ["claude-code"],
+      "selections": [],
+    },
+  },
+  "database": "postgres",
+  "orm": "drizzle",
+  "backend": "hono",
+  "runtime": "bun",
+  "frontend": ["tanstack-router"],
+  "addons": ["turborepo", "biome", "husky", "skills", "mcp", "evlog"],
+  "examples": [],
+  "auth": "better-auth",
+  "payments": "none",
+  "packageManager": "bun",
+  "dbSetup": "docker",
+  "api": "trpc",
+  "webDeploy": "none",
+  "serverDeploy": "none",
+}
