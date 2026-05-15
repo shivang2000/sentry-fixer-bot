@@ -22,7 +22,8 @@
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
-    "build": "turbo build",
+    "build": "turbo build && bun run build:web-into-server",
+    "build:web-into-server": "rm -rf apps/server/public && mkdir -p apps/server/public && cp -R apps/web/dist/. apps/server/public/",
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",

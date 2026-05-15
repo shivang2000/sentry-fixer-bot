@@ -43,3 +43,4 @@ temp
 tmp
 yarn-debug.log*
 yarn-error.log*
+apps/server/public

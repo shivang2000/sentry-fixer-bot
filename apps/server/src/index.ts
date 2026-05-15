@@ -9,6 +9,7 @@ import { initLogger } from "evlog";
 import { type BetterAuthInstance, createAuthMiddleware } from "evlog/better-auth";
 import { type EvlogVariables, evlog } from "evlog/hono";
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { boardClaim } from "./routes/board-claim";
 import { chatWs, websocket } from "./routes/chat-ws";
@@ -65,8 +66,13 @@ app.use(
   }),
 );
 
-app.get("/", (c) => {
-  return c.text("OK");
-});
+// Production: serve built web app from apps/server/public/ (populated by
+// `bun run build` which copies apps/web/dist/* over).
+if (env.NODE_ENV === "production") {
+  app.use("/assets/*", serveStatic({ root: "./apps/server/public" }));
+  app.get("*", serveStatic({ path: "./apps/server/public/index.html" }));
+} else {
+  app.get("/", (c) => c.text("OK"));
+}
 
 export default app;
