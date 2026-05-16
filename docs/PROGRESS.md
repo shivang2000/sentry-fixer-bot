@@ -1,8 +1,9 @@
 # sentry-fixer-bot — Progress Tracker
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-16 (post V2 UI completion)
 **Tag:** `mvp-1.0.0`
-**Commits since plan committed:** 28 (local; push pending)
+**Plan executed:** [`plans/2026-05-16-v2-ui-completion-plan.md`](plans/2026-05-16-v2-ui-completion-plan.md)
+**Commits since plan committed:** 28 + V2 UI work (local; push pending)
 
 This is the canonical status of the project against the design docs:
 [`design.md`](design.md), [`architecture.md`](architecture.md),
@@ -87,18 +88,18 @@ Status legend:
 |---|---|---|
 | E1: tRPC context with user + adminProcedure | ✅ | `packages/api/src/context.ts`, `index.ts` |
 | E2: Repos CRUD router (list / create / update / delete) | ✅ | `packages/api/src/routers/repos.ts` |
-| E3: `/repos` list page | ✅ | `apps/web/src/routes/repos.tsx` |
-| E4: Add/Edit/Delete form pages | ⬜ | API ready; form components not built |
+| E3: `/repos` list page | ✅ | `apps/web/src/routes/repos.tsx` (refreshed with shadcn Table + actions) |
+| E4: Add/Edit/Delete form pages | ✅ | `RepoForm` modal + `/repos/$id` dedicated edit page + `ConfirmDialog` delete |
 | E5: MCP catalog + install router | ✅ | `routers/mcps.ts`, `mcps-catalog.ts` |
 | E6: Env-file writer (atomic + systemctl reload) | ✅ | `secrets/env-file.ts` + shell-quote tests |
-| E7: MCP catalog + install UI page | ⬜ | API ready; UI form not built |
-| E8: Skills install router (built-in + upload + skills.sh) | ⬜ | Schema exists; router not built |
-| E9: Skills page UI | ⬜ | depends on E8 |
+| E7: MCP catalog + install UI page | ✅ | `/mcps` two-tab page + `McpInstallDialog` with xterm install log |
+| E8: Skills install router (built-in + upload + skills.sh) | ✅ | `packages/api/src/routers/skills.ts` with catalog/list/installBuiltin/installCustom/installFromSh/uninstall + `skills-zip.ts` safety helpers |
+| E9: Skills page UI | ✅ | `/skills` three-tab page (Built-in / Custom upload / skills.sh) |
 | E10: Per-run claude-home renderer (MCPs + skills into agent run) | ✅ | `agent/render-claude-home.ts` |
 | E11: Runs/PRs read API + UI page | ✅ | `routers/runs.ts`, `/runs` page |
-| E12: Settings page (Anthropic / GitHub App status, kill switch) | ⬜ | env keys exist; no UI |
-| E13: Invite management UI | ⬜ | `invites` table + first-signup logic; UI absent |
-| E14: Audit log | ⬜ | no `audit_log` table yet |
+| E12: Settings page (Anthropic / GitHub App status, kill switch) | ⬜ | env keys exist; no UI (deferred to V2.1) |
+| E13: Invite management UI | ⬜ | `invites` table + first-signup logic; UI absent (deferred) |
+| E14: Audit log | ⬜ | no `audit_log` table yet (deferred) |
 
 ## Section F — Chat (PTY + WebSocket + OAuth URL capture)
 
@@ -108,8 +109,8 @@ Status legend:
 | F2: OAuth URL detector | ✅ | 6 TDD tests, `chat/url-detector.ts` |
 | F3: WebSocket chat endpoint | ✅ | GET `/api/chat/:sessionId`, `routes/chat-ws.ts` |
 | F4: Chat tRPC router (create/list/messages/end) | ✅ | `routers/chat.ts` |
-| F5: `/chat` UI page | ⬜ | not built; reachable only via raw WebSocket |
-| F6: Idle timeout (30 min) + budget integration | ⬜ | sessions live forever; budget not charged |
+| F5: `/chat` UI page | ✅ | xterm.js terminal + WebSocket client + `OAuthCard` intercept + session picker |
+| F6: Idle timeout (30 min) + budget integration | ⬜ | sessions live forever; budget not charged (deferred) |
 | F7: Single concurrent session per user | ✅ | enforced in `chat.create` mutation |
 
 ## Section G — Deploy
@@ -141,7 +142,7 @@ Status legend:
 
 ### Tests
 
-- **bun test**: 87 pass / 0 fail / 102 expect() calls across ~10 test files
+- **bun test**: 120 pass / 0 fail / 159 expect() calls (added 9 tests for skills catalog + zip validation)
 - **check-types**: green across 8 packages (server, web, api, auth, db, env, ui, config)
 - Pure-function TDD coverage: HMAC verify, dedup key, trusted origins, role check, claim validate, doctor verdict, parseTriageJson, decideBudget, parseAgentOutput, scanText, detectOAuthPrompt, shellQuote/isValidEnvKey, shouldSeedLocalBoard
 
@@ -172,16 +173,17 @@ Status legend:
 | Deployment modes (local_trusted / authenticated) | ✅ | |
 | Bind decoupled (loopback/lan/tailnet/custom) | ✅ | |
 | Invites + first-signup-admin + claim URL | ✅ | |
-| Repo CRUD (replaces repos.yaml) | 🟡 | list shipped; create/update/delete forms ⬜ |
+| Repo CRUD (replaces repos.yaml) | ✅ | list + add modal + edit page + delete confirm |
 | MCP catalog | ✅ | hand-rolled (github + filesystem) |
 | MCP install API + secret env-file writer | ✅ | |
-| MCP install UI form | ⬜ | E7 |
-| Skill install (built-in + upload + skills.sh) | ⬜ | E8 |
+| MCP install UI form | ✅ | `/mcps` tabs + dynamic envSchema form + xterm install log |
+| Skill install (built-in + upload + skills.sh) | ✅ | router + 3-tab UI; skills.sh degrades to external link |
 | Per-run claude-home rendering | ✅ | |
-| Chat (PTY + WebSocket + OAuth URL capture) | 🟡 | server-side complete; UI page absent |
-| Audit log | ⬜ | |
-| Settings page | ⬜ | |
-| Server-Sent Events for run status push | ⬜ | runs UI polls; SSE not built |
+| Chat (PTY + WebSocket + OAuth URL capture) | ✅ | `/chat` route with xterm + OAuth intercept card |
+| Sidebar nav (Paperclip-style) | ✅ | `app-sidebar.tsx` + `SidebarProvider`/`SidebarInset` in `__root.tsx` |
+| Audit log | ⬜ | (deferred to V2.1) |
+| Settings page | ⬜ | (deferred to V2.1) |
+| Server-Sent Events for run status push | ⬜ | runs UI polls; SSE not built (deferred) |
 
 ---
 
@@ -190,11 +192,11 @@ Status legend:
 | Item | Status | Action needed |
 |---|---|---|
 | `git push origin main mvp-1.0.0` | ⬜ | safety classifier blocked direct push to main; operator runs manually |
-| README quickstart | ⬜ | scaffold's README is generic; operator-facing setup steps not written |
-| CI pipeline (GitHub Actions) | ⬜ | check-types + bun test on PR; not configured |
+| README quickstart | ✅ | rewritten for `mvp-1.0.0` + V2 UI; bun/docker/ngrok flow + first-signup admin |
+| CI pipeline (GitHub Actions) | ✅ | `.github/workflows/ci.yml` runs `bun install --frozen-lockfile`, `bun run check-types`, `bun test` on PRs + main |
 | Pre-commit hooks (lint-staged + biome) | ✅ | husky installed by scaffold |
 | Pre-push secret scan | ⬜ | the bot's *own* commits don't run a secret scan; only agent runs do |
-| Operator runbook | ⬜ | `/etc/sfb/env` shape, systemd commands, EC2 boot sequence not documented |
+| Operator runbook | ✅ | `docs/runbook.md` — env, systemd, EC2 boot, backup/restore, key rotation, kill switch, failure table |
 | ANTHROPIC_API_KEY + GitHub App + S3 + Sentry creds for E2E | ⬜ | required for D-section worker smoke |
 | EBS volume encryption + KMS keys | ⬜ | architecture.md §3 specifies; not enforced |
 | IAM role on EC2 (put-only S3) | ⬜ | userdata creates instance; IAM role policy out of scope of script |
@@ -239,23 +241,18 @@ To onboard a repo for the bot to fix:
 
 ## Next minimum work to make this usable end-to-end
 
-Priority order to ship a usable operator product:
+V2 UI completion plan (`plans/2026-05-16-v2-ui-completion-plan.md`) shipped. Remaining items:
 
-1. **README quickstart** + operator runbook (`docs/runbook.md`)
-2. **CI: check-types + bun test on PR** (`.github/workflows/ci.yml`)
-3. **E4 — Repo create/edit form** (~half day; uses existing tRPC mutations)
-4. **E7 — MCP install UI** (~half day; render form from `envSchema`)
-5. **F5 — `/chat` UI page** (WebSocket client + OAuth URL card)
-6. **Push to GitHub** (manual: `git push origin main mvp-1.0.0`)
-7. **Sentry internal-integration + GitHub App setup docs**
-
-After that:
-
-8. E8/E9 — Skills install (built-in catalog ships zero entries today)
-9. F6 — Chat idle timeout + budget integration
-10. sfb-cron service for stale-PR close + dedup prune
-11. CloudWatch agent + alarms (architecture.md §8)
-12. EC2 deploy smoke (H2)
+1. **Push to GitHub** (manual: `git push origin main mvp-1.0.0` + the V2 UI work)
+2. **Sentry internal-integration + GitHub App setup docs** — what scopes, how to mint the token
+3. **E12 — Settings page** (Anthropic / GitHub App status, kill switch toggle)
+4. **E13 — Invite management UI**
+5. **F6 — Chat idle timeout (30 min) + budget integration**
+6. **sfb-cron service** for stale-PR close + dedup prune (architecture.md §6)
+7. **CloudWatch agent + alarms** (architecture.md §8)
+8. **EC2 deploy smoke** (H2) — needs AWS creds + GitHub App + Sentry creds in `/etc/sfb/env`
+9. **Skills.sh API contract**: once known, finalise the results renderer in `/skills` skills.sh tab (currently shows "Render TBD")
+10. **E14 — Audit log** (`audit_log` table + UI)
 
 ---
 
