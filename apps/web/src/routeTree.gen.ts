@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SkillsRouteImport } from './routes/skills'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RunsRouteImport } from './routes/runs'
 import { Route as ReposRouteImport } from './routes/repos'
 import { Route as McpsRouteImport } from './routes/mcps'
@@ -22,6 +23,11 @@ import { Route as ReposIdRouteImport } from './routes/repos.$id'
 const SkillsRoute = SkillsRouteImport.update({
   id: '/skills',
   path: '/skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RunsRoute = RunsRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/mcps'
     | '/repos'
     | '/runs'
+    | '/settings'
     | '/skills'
     | '/repos/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/mcps'
     | '/repos'
     | '/runs'
+    | '/settings'
     | '/skills'
     | '/repos/$id'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/mcps'
     | '/repos'
     | '/runs'
+    | '/settings'
     | '/skills'
     | '/repos/$id'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   McpsRoute: typeof McpsRoute
   ReposRoute: typeof ReposRouteWithChildren
   RunsRoute: typeof RunsRoute
+  SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
 }
 
@@ -153,6 +166,13 @@ declare module '@tanstack/react-router' {
       path: '/skills'
       fullPath: '/skills'
       preLoaderRoute: typeof SkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/runs': {
@@ -232,6 +252,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpsRoute: McpsRoute,
   ReposRoute: ReposRouteWithChildren,
   RunsRoute: RunsRoute,
+  SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
 }
 export const routeTree = rootRouteImport

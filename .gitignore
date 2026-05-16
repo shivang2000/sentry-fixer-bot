@@ -29,6 +29,7 @@
 .nx
 .nyc_output
 .omc/
+.playwright-mcp/
 .pnp
 .pnp.js
 .pnpm-debug.log*

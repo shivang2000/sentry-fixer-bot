@@ -33,7 +33,32 @@ describe("detectOAuthPrompt", () => {
 
   it("ignores trailing punctuation in the URL", () => {
     const out = detectOAuthPrompt("Visit this URL: https://claude.ai/login.");
-    // Match drops trailing period since . is not in our URL character class
     expect(out?.url).toBe("https://claude.ai/login");
+  });
+
+  it("reassembles a URL hard-wrapped by the PTY at column 80", () => {
+    const wrapped =
+      "Browser didn't open? Use the URL below to sign in\r\n\r\n" +
+      "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88\r\n" +
+      "ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fexample.com\r\n";
+    expect(detectOAuthPrompt(wrapped)?.url).toBe(
+      "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fexample.com",
+    );
+  });
+
+  it("stops at a blank line so post-URL prose isn't consumed", () => {
+    const out = detectOAuthPrompt(
+      "Browser didn't open? Use the URL below to sign in\r\n\r\n" +
+        "https://claude.com/cai/oauth/authorize?code=true&client_id=abc\r\n" +
+        "\r\nPaste code here if prompted >",
+    );
+    expect(out?.url).toBe("https://claude.com/cai/oauth/authorize?code=true&client_id=abc");
+  });
+
+  it("strips ANSI escapes before matching", () => {
+    const out = detectOAuthPrompt(
+      "\x1b[1mOpen the following URL\x1b[0m: \x1b[36mhttps://claude.ai/login/x\x1b[0m",
+    );
+    expect(out?.url).toBe("https://claude.ai/login/x");
   });
 });

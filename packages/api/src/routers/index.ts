@@ -3,6 +3,7 @@ import { chatRouter } from "./chat";
 import { mcpsRouter } from "./mcps";
 import { reposRouter } from "./repos";
 import { runsRouter } from "./runs";
+import { settingsRouter } from "./settings";
 import { skillsRouter } from "./skills";
 
 export const appRouter = router({
@@ -17,5 +18,6 @@ export const appRouter = router({
   mcps: mcpsRouter,
   chat: chatRouter,
   skills: skillsRouter,
+  settings: settingsRouter,
 });
 export type AppRouter = typeof appRouter;

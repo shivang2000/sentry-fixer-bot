@@ -1,0 +1,69 @@
+# Local development image for sentry-fixer-bot.
+#
+# Pairs with docker-compose.dev.yml. Source is BIND-MOUNTED from the
+# host at runtime — this image only carries OS dependencies and the
+# sfb-runner user. `bun install` runs inside the container so the
+# resulting node_modules are Linux binaries (a host install on
+# Mac/arm64 would leak the wrong artefacts into a Linux container).
+
+FROM amazonlinux:2023
+
+# Install the same OS deps that bootstrap-al2023.sh installs on EC2.
+# This image is built with `context: ../..` so the script is copied in
+# directly (no GitHub fetch).
+COPY deploy/ec2/bootstrap-al2023.sh /tmp/bootstrap.sh
+RUN bash /tmp/bootstrap.sh && rm -f /tmp/bootstrap.sh
+
+# bootstrap-al2023.sh installs claude under /home/ec2-user/.nvm and symlinks
+# /usr/local/bin/claude to it. ec2-user's home is mode 0700 so other users
+# (sfb-runner, who actually runs the chat/agent subprocesses) cannot follow
+# the symlink. Open up traversal on the path components only — the binaries
+# themselves are already mode 0755.
+RUN chmod o+x /home/ec2-user
+
+# Pre-create the bind-mount target AND every anonymous-volume mount
+# point as sfb-runner so the volumes inherit that ownership at first
+# container start. Without this they'd be root-owned and the sfb-runner
+# subprocess in setup.sh couldn't write into them.
+RUN install -d -o sfb-runner -g sfb-runner \
+      /opt/sfb \
+      /opt/sfb/current \
+      /opt/sfb/current/node_modules \
+      /opt/sfb/current/apps \
+      /opt/sfb/current/apps/server \
+      /opt/sfb/current/apps/server/node_modules \
+      /opt/sfb/current/apps/server/dist \
+      /opt/sfb/current/apps/server/public \
+      /opt/sfb/current/apps/web \
+      /opt/sfb/current/apps/web/node_modules \
+      /opt/sfb/current/apps/web/dist \
+      /opt/sfb/current/packages \
+      /opt/sfb/current/packages/api/node_modules \
+      /opt/sfb/current/packages/auth/node_modules \
+      /opt/sfb/current/packages/config/node_modules \
+      /opt/sfb/current/packages/db/node_modules \
+      /opt/sfb/current/packages/env/node_modules \
+      /opt/sfb/current/packages/ui/node_modules
+
+# Pre-create credential + env-file dirs as sfb-runner so the named volumes
+# (sfb_dev_claude, sfb_dev_gh, sfb_dev_etc_sfb in docker-compose.dev.yml)
+# inherit the correct ownership on first up. Without this the volumes mount
+# as root-owned and the sfb-runner subprocess cannot write into them.
+RUN install -d -o sfb-runner -g sfb-runner -m 0700 \
+      /home/sfb-runner/.claude \
+      /home/sfb-runner/.config \
+      /home/sfb-runner/.config/gh \
+ && install -d -o root -g sfb-runner -m 0770 /etc/sfb
+
+WORKDIR /opt/sfb/current
+
+ENV SFB_RUN_MODE=container \
+    NODE_ENV=development \
+    PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+
+EXPOSE 3000
+
+# setup.sh runs as root, handles bun install / migrate / build as
+# sfb-runner internally, then exec's the server as PID 1 so logs
+# stream to `docker compose logs -f`.
+CMD ["bash", "/opt/sfb/current/setup.sh"]

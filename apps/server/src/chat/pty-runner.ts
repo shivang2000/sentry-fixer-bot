@@ -8,25 +8,54 @@ export type PtyHandle = {
 };
 
 /**
- * Spawn an interactive Claude Code subprocess for chat.
- *
- * On Linux we wrap with `script -q -c "<cmd>" /dev/null` so the child gets
- * a real TTY (Claude's CLI checks isatty and dumbs down output without it).
- * Bun.spawn ships a pty option in newer versions but is not stable enough
- * here to rely on. macOS `script(1)` has different flags; chat is only
- * supported on the Linux EC2 deployment.
+ * Spawn an arbitrary command inside a PTY (via util-linux `script(1)`) so the
+ * child gets a real TTY. The chat + login routes both use this. macOS
+ * `script(1)` has different flags; this code path is Linux-only — chat and
+ * login flows are documented as Linux-only and the dev compose runs in an
+ * amazonlinux:2023 container.
  */
-export function spawnClaudeInteractive(input: { cwd: string; prompt: string }): PtyHandle {
-  const claudeCmd = `${env.CLAUDE_BIN} --dangerously-skip-permissions --model ${env.CLAUDE_MODEL}`;
-  const proc = spawn("script", ["-q", "-c", claudeCmd, "/dev/null"], {
+export function spawnPtyCommand(input: {
+  cmd: string;
+  args?: string[];
+  cwd: string;
+  env?: Record<string, string>;
+}): PtyHandle {
+  const quoted = [input.cmd, ...(input.args ?? [])]
+    .map((a) => (/[\s"'$`\\]/.test(a) ? `'${a.replace(/'/g, "'\\''")}'` : a))
+    .join(" ");
+  const proc = spawn("script", ["-q", "-c", quoted, "/dev/null"], {
     cwd: input.cwd,
-    env: { ...process.env, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "" },
+    // Wide COLUMNS so claude's setup-token URL doesn't wrap mid-string at
+    // the default 80 chars — the OAuth-URL detector tokenizes on whitespace
+    // and would otherwise stop at the wrap point.
+    env: {
+      COLUMNS: "200",
+      LINES: "50",
+      TERM: "xterm-256color",
+      ...process.env,
+      ...(input.env ?? {}),
+    },
     stdio: ["pipe", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
-  if (input.prompt) proc.stdin.write(`${input.prompt}\n`);
   return {
     proc,
     write: (data: string) => proc.stdin.write(data),
     kill: () => proc.kill("SIGTERM"),
   };
+}
+
+/**
+ * Spawn an interactive Claude Code subprocess for chat. Thin wrapper around
+ * spawnPtyCommand kept for back-compat with chat-ws callers.
+ */
+export function spawnClaudeInteractive(input: { cwd: string; prompt: string }): PtyHandle {
+  const args = ["--dangerously-skip-permissions", "--model", env.CLAUDE_MODEL];
+  const handle = spawnPtyCommand({
+    cmd: env.CLAUDE_BIN,
+    args,
+    cwd: input.cwd,
+    env: { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "" },
+  });
+  if (input.prompt) handle.write(`${input.prompt}\n`);
+  return handle;
 }

@@ -1,0 +1,94 @@
+name: sentry-fixer-bot-dev
+
+# Local development:
+#   * Bind-mounts the host repo into the container so edits are visible
+#     immediately (no rebuild).
+#   * Anonymous volumes mask every node_modules / dist / public path so
+#     a host-side `bun install` (which produces macOS arm64 binaries)
+#     can't leak into the Linux container.
+#   * `bun install` runs inside the container on first up; cached in
+#     the named `sfb_dev_node_modules_*` volumes after.
+#   * DEPLOYMENT_MODE=local_trusted bootstraps the local-board admin
+#     automatically — no /sign-up needed; visit / and you're admin.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: sfb-dev-postgres
+    environment:
+      POSTGRES_DB: sentry-fixer-bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - sfb_dev_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sentry-fixer-bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  sfb:
+    container_name: sfb-dev-app
+    build:
+      # The dev image needs the whole repo at build time so we can copy
+      # bootstrap-al2023.sh in (rather than curling it from GitHub).
+      context: ../..
+      dockerfile: deploy/docker-test/Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:password@postgres:5432/sentry-fixer-bot
+      BETTER_AUTH_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+      PUBLIC_BASE_URL: http://localhost:3000
+      # Vite bakes VITE_* vars into the JS bundle at build time; the SPA
+      # uses this to reach the tRPC + auth endpoints.
+      VITE_SERVER_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: dev-only-secret-not-for-production-use-this
+      DEPLOYMENT_MODE: local_trusted
+      SERVER_BIND: loopback
+      SERVER_BIND_HOST: 0.0.0.0
+      SFB_RUN_MODE: container
+      # production lets the server serve the built SPA from
+      # apps/server/public; dev mode would return "OK" on /.
+      NODE_ENV: production
+      # Always rebuild — host code changes are visible via bind mount and
+      # the turbo cache is per-container; skipping it on every restart
+      # makes hot iteration painful.
+      TURBO_FORCE: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      # Bind mount the host repo at the container's working directory.
+      - ../..:/opt/sfb/current
+      # Anonymous volumes mask every host node_modules / build artefact
+      # path so the Linux container keeps its own copies.
+      - /opt/sfb/current/node_modules
+      - /opt/sfb/current/apps/server/node_modules
+      - /opt/sfb/current/apps/server/dist
+      - /opt/sfb/current/apps/server/public
+      - /opt/sfb/current/apps/web/node_modules
+      - /opt/sfb/current/apps/web/dist
+      - /opt/sfb/current/packages/api/node_modules
+      - /opt/sfb/current/packages/auth/node_modules
+      - /opt/sfb/current/packages/config/node_modules
+      - /opt/sfb/current/packages/db/node_modules
+      - /opt/sfb/current/packages/env/node_modules
+      - /opt/sfb/current/packages/ui/node_modules
+      # Persist Claude + GitHub CLI creds across container restarts so the
+      # "Log in to Claude" / "Log in to GitHub" buttons on /settings stick.
+      - sfb_dev_claude:/home/sfb-runner/.claude
+      - sfb_dev_gh:/home/sfb-runner/.config/gh
+      # /etc/sfb holds the env file the secret-writer mutates from /settings.
+      - sfb_dev_etc_sfb:/etc/sfb
+    restart: unless-stopped
+
+volumes:
+  sfb_dev_postgres:
+  sfb_dev_claude:
+  sfb_dev_gh:
+  sfb_dev_etc_sfb:

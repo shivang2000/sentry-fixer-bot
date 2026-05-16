@@ -16,8 +16,6 @@ import { chatWs, websocket } from "./routes/chat-ws";
 import { health } from "./routes/health";
 import { sentryWebhook } from "./routes/sentry-webhook";
 
-export { websocket };
-
 initLogger({
   env: { service: "sentry-fixer-bot-server" },
 });
@@ -75,4 +73,10 @@ if (env.NODE_ENV === "production") {
   app.get("/", (c) => c.text("OK"));
 }
 
-export default app;
+// Bun needs `websocket` exposed on the default export so it can attach the
+// WS handler to Bun.serve. `export default app` alone misses it — Hono's
+// `app.fetch` is forwarded, but `websocket` has to ride alongside.
+export default {
+  fetch: app.fetch,
+  websocket,
+};

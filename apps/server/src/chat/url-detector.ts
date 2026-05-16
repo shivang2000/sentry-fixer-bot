@@ -1,4 +1,7 @@
-const URL_PATTERN = /https?:\/\/[A-Za-z0-9._~:/?#@!$&'()*+,;=%[\]-]+[A-Za-z0-9_/-]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape stripping needs raw ESC byte
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: OSC + DCS sequences also start with ESC
+const OSC = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 
 const HINTS = [
   /open the following url/i,
@@ -6,11 +9,60 @@ const HINTS = [
   /authentication code/i,
   /paste.*code/i,
   /open this url/i,
+  /browser didn'?t open/i,
+  /sign in.*claude/i,
+  /first copy.*one-time/i,
+  /one-time code/i,
 ];
 
+const URL_CHAR = /[A-Za-z0-9._~:/?#@!$&'()*+,;=%[\]-]/;
+
+/**
+ * Pull an `https://...` URL out of a noisy PTY buffer. Two complications:
+ *
+ *   1. The buffer contains ANSI escape codes (cursor moves, colors).
+ *   2. The TTY is 80 columns, so URLs longer than that get hard-wrapped —
+ *      CR/LF gets injected mid-URL. The detector reassembles by reading
+ *      URL chars and skipping any intervening whitespace (URLs don't
+ *      legitimately contain whitespace).
+ *
+ * Returns null until we see one of the OAuth hint phrases AND find a URL.
+ */
 export function detectOAuthPrompt(buffer: string): { url: string } | null {
-  if (!HINTS.some((re) => re.test(buffer))) return null;
-  const m = buffer.match(URL_PATTERN);
-  if (!m || m.length === 0) return null;
-  return { url: m[0] };
+  const clean = buffer.replace(ANSI, "").replace(OSC, "");
+  if (!HINTS.some((re) => re.test(clean))) return null;
+
+  const start = clean.indexOf("https://");
+  if (start < 0) return null;
+
+  // PTY hard-wrap continuation rule: real wraps emit a single `\r\n` (CR
+  // then LF) at the column boundary, with URL characters resuming on the
+  // next line. Two cases must end the URL:
+  //   1. Plain text afterwards (bare `\n` line break in a sentence).
+  //   2. A blank line — i.e. two consecutive `\r\n` sequences. Claude's
+  //      setup-token prints the URL, then a blank line, then "Paste code
+  //      here if prompted". Without this guard the detector swallows the
+  //      prompt text into the URL.
+  let url = "";
+  let prev = "";
+  let pendingNewlines = 0;
+  for (let i = start; i < clean.length; i++) {
+    const c = clean[i] as string;
+    if (URL_CHAR.test(c)) {
+      url += c;
+      prev = c;
+      pendingNewlines = 0;
+    } else if (c === "\r") {
+      prev = c;
+    } else if (c === "\n" && prev === "\r") {
+      prev = c;
+      pendingNewlines += 1;
+      if (pendingNewlines >= 2) break;
+    } else {
+      break;
+    }
+  }
+  // Drop trailing punctuation a sentence ("Open https://x/y.") would attach.
+  url = url.replace(/[.,;:!?]+$/, "");
+  return url.length > "https://".length ? { url } : null;
 }
