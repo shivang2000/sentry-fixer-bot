@@ -15,6 +15,7 @@ import { Route as RunsRouteImport } from './routes/runs'
 import { Route as ReposRouteImport } from './routes/repos'
 import { Route as McpsRouteImport } from './routes/mcps'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
@@ -50,6 +51,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DoctorRoute = DoctorRouteImport.update({
+  id: '/doctor',
+  path: '/doctor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
+  '/doctor': typeof DoctorRoute
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
+  '/doctor': typeof DoctorRoute
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
+  '/doctor': typeof DoctorRoute
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/dashboard'
+    | '/doctor'
     | '/login'
     | '/mcps'
     | '/repos'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/dashboard'
+    | '/doctor'
     | '/login'
     | '/mcps'
     | '/repos'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/dashboard'
+    | '/doctor'
     | '/login'
     | '/mcps'
     | '/repos'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRoute
   DashboardRoute: typeof DashboardRoute
+  DoctorRoute: typeof DoctorRoute
   LoginRoute: typeof LoginRoute
   McpsRoute: typeof McpsRoute
   ReposRoute: typeof ReposRouteWithChildren
@@ -203,6 +216,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/doctor': {
+      id: '/doctor'
+      path: '/doctor'
+      fullPath: '/doctor'
+      preLoaderRoute: typeof DoctorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -248,6 +268,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DashboardRoute: DashboardRoute,
+  DoctorRoute: DoctorRoute,
   LoginRoute: LoginRoute,
   McpsRoute: McpsRoute,
   ReposRoute: ReposRouteWithChildren,

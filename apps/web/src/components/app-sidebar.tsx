@@ -34,6 +34,7 @@ import {
   Plug,
   Settings,
   Sparkles,
+  Stethoscope,
   Sun,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
@@ -55,7 +56,10 @@ const NAV_OBSERVE = [
   { to: "/chat", label: "Chat", icon: MessageSquareCode },
 ] as const;
 
-const NAV_SYSTEM = [{ to: "/settings", label: "Settings", icon: Settings }] as const;
+const NAV_SYSTEM = [
+  { to: "/doctor", label: "Doctor", icon: Stethoscope },
+  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
 
 function NavGroup({
   label,

@@ -1,21 +1,34 @@
 /**
- * Worker entry: registers pg-boss handlers for triage + agent jobs.
- * Run via `bun apps/server/src/worker/index.ts` (separate process from
- * the HTTP server; pg-boss coordinates via Postgres).
+ * Worker entry: registers pg-boss handlers for triage + agent jobs +
+ * Sentry poll + health-check probes. Run via
+ *   `bun apps/server/src/worker/index.ts`
+ * standalone, or via the in-band import from the HTTP server in
+ * container mode.
  */
 import { log } from "../log";
-import { getBoss, scheduleRecurring } from "../queue/boss";
+import { getBoss, getScheduleStatus, scheduleRecurring } from "../queue/boss";
 import {
   type AgentJob,
+  type HealthCheckJob,
   JOB_AGENT,
+  JOB_HEALTH_CHECK,
   JOB_SENTRY_POLL,
   JOB_TRIAGE,
   type SentryPollJob,
   type TriageJob,
 } from "../queue/jobs";
 import { processAgentJob } from "./agent-job";
+import { processHealthCheckJob } from "./health-check-job";
 import { processSentryPollJob } from "./sentry-poll-job";
 import { processTriageJob } from "./triage-job";
+
+async function ensureDefaultSchedule(name: string, cron: string, data: object = {}): Promise<void> {
+  // Operator-controlled choice wins: only seed when no row exists, so
+  // "set preset = never" via the UI persists across reboots.
+  const cur = await getScheduleStatus(name);
+  if (cur.cron) return;
+  await scheduleRecurring(name, cron, data);
+}
 
 async function main(): Promise<void> {
   const boss = await getBoss();
@@ -35,14 +48,23 @@ async function main(): Promise<void> {
   });
 
   await boss.work<SentryPollJob>(JOB_SENTRY_POLL, async (jobs) => {
-    for (const _ of jobs) {
-      await processSentryPollJob();
+    for (const job of jobs) {
+      await processSentryPollJob(job.data ?? {});
     }
   });
 
-  // Recurring schedule: poll Sentry every 15 minutes. pg-boss upserts by
-  // name so this is safe to re-issue on every worker boot.
-  await scheduleRecurring(JOB_SENTRY_POLL, "*/15 * * * *");
+  await boss.work<HealthCheckJob>(JOB_HEALTH_CHECK, async (jobs) => {
+    for (const _ of jobs) {
+      await processHealthCheckJob();
+    }
+  });
+
+  // First-run defaults. Idempotent: subsequent boots respect whatever
+  // the operator set in the UI (including "never"). Defaults match the
+  // 15m / 30m / 1h / 4h / 1d presets the UI offers — keep them in that
+  // set so the dropdowns reflect actual values.
+  await ensureDefaultSchedule(JOB_SENTRY_POLL, "*/15 * * * *", { lookbackMinutes: 15 });
+  await ensureDefaultSchedule(JOB_HEALTH_CHECK, "*/15 * * * *");
 
   log.info("worker ready");
 }

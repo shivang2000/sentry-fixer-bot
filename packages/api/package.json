@@ -19,6 +19,7 @@
     "adm-zip": "^0.5.17",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
+    "pg-boss": "^12.18.2",
     "zod": "catalog:"
   },
   "devDependencies": {

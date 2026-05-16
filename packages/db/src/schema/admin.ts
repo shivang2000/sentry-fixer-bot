@@ -99,3 +99,14 @@ export const chatMessages = pgTable(
   },
   (t) => [index("chat_messages_session_idx").on(t.sessionId, t.createdAt)],
 );
+
+// Singleton-ish snapshot table for the health-check cron. We never need
+// history here — dashboard + doctor want the *current* state, and the
+// recurring job rewrites this row on every tick. id is the literal string
+// "current" so the upsert is unconditional.
+export const healthSnapshots = pgTable("health_snapshots", {
+  id: text("id").primaryKey(),
+  payload: jsonb("payload").notNull(),
+  ready: boolean("ready").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+});

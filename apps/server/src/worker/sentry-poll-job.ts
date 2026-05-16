@@ -19,10 +19,10 @@ type SentryIssue = {
   metadata?: { type?: string; value?: string };
 };
 
-async function fetchRecentIssues(project: string): Promise<SentryIssue[]> {
+async function fetchRecentIssues(project: string, lookbackMinutes: number): Promise<SentryIssue[]> {
   if (!env.SENTRY_API_TOKEN || !env.SENTRY_ORG_SLUG) return [];
   const url = new URL(`${SENTRY_BASE}/projects/${env.SENTRY_ORG_SLUG}/${project}/issues/`);
-  url.searchParams.set("statsPeriod", "15m");
+  url.searchParams.set("statsPeriod", `${lookbackMinutes}m`);
   url.searchParams.set("limit", "100");
   url.searchParams.set("query", "is:unresolved");
   const res = await fetch(url, {
@@ -39,16 +39,20 @@ async function fetchRecentIssues(project: string): Promise<SentryIssue[]> {
 }
 
 /**
- * Poll Sentry every 15 minutes (cron-scheduled in worker/index.ts) and
- * enqueue triage for issues we haven't seen yet. Uses the same alerts
- * dedup_key as webhook ingestion so a webhook arrival + a poll discovery
- * of the same issue do not double-enqueue.
+ * Poll Sentry on a configurable cadence (scheduled in worker/index.ts).
+ * Enqueues triage for issues we haven't seen yet. Uses a poll-prefixed
+ * dedup_key so webhook arrivals + poll discoveries don't collide.
+ *
+ * `data.lookbackMinutes` flows in from the pg-boss schedule payload so a
+ * 1-hour cron actually asks Sentry for the last hour, not 15 minutes.
+ * Fallback is 15 for legacy / runNow callers.
  */
-export async function processSentryPollJob(): Promise<void> {
+export async function processSentryPollJob(data: { lookbackMinutes?: number } = {}): Promise<void> {
   if (!env.SENTRY_API_TOKEN || !env.SENTRY_ORG_SLUG) {
     log.warn("[sentry-poll] SENTRY_API_TOKEN/SENTRY_ORG_SLUG not set; skipping");
     return;
   }
+  const lookbackMinutes = data.lookbackMinutes ?? 15;
   const db = createDb();
   const repos = await db
     .select({ sentryProject: reposConfig.sentryProject })
@@ -64,7 +68,7 @@ export async function processSentryPollJob(): Promise<void> {
   for (const r of repos) {
     let issues: SentryIssue[];
     try {
-      issues = await fetchRecentIssues(r.sentryProject);
+      issues = await fetchRecentIssues(r.sentryProject, lookbackMinutes);
     } catch (err) {
       log.warn(
         { project: r.sentryProject, err: err instanceof Error ? err.message : err },
