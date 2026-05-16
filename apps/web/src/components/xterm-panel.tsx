@@ -47,7 +47,9 @@ export const XtermPanel = forwardRef<XtermPanelHandle, Props>(function XtermPane
         white: "#e5e5e5",
       },
       cursorBlink: true,
-      convertEol: true,
+      // PTY stdout already emits CR+LF — convertEol would double-insert
+      // \r and the cursor would drop a column with every newline.
+      convertEol: false,
       scrollback: 5000,
       rows,
       allowTransparency: false,

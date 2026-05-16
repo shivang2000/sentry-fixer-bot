@@ -60,8 +60,16 @@ export function spawnPtyCommand(input: {
 }
 
 /**
- * Spawn an interactive Claude Code subprocess for chat. Thin wrapper around
- * spawnPtyCommand kept for back-compat with chat-ws callers.
+ * Spawn a login bash shell for the chat session. The user gets a real
+ * SSH-style prompt: they can `claude`, `gh auth login`, `vim`, `ls`,
+ * anything that's on PATH. claude is NOT launched automatically —
+ * kiosk mode was too restrictive (no way to inspect creds, install
+ * MCPs, edit files, run agent dry-runs).
+ *
+ * The shell inherits the env file's HOME (= /sfb/state/home in
+ * container mode) so any dotfile the user creates (.bash_history,
+ * .claude/, .config/gh/, future .codex/.opencloud/) survives a
+ * crash + container recreate.
  */
 export function spawnClaudeInteractive(input: {
   cwd: string;
@@ -69,14 +77,18 @@ export function spawnClaudeInteractive(input: {
   cols?: number;
   rows?: number;
 }): PtyHandle {
-  const args = ["--dangerously-skip-permissions", "--model", env.CLAUDE_MODEL];
   const handle = spawnPtyCommand({
-    cmd: env.CLAUDE_BIN,
-    args,
+    cmd: "/bin/bash",
+    args: ["--login"],
     cwd: input.cwd,
     cols: input.cols,
     rows: input.rows,
-    env: { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "" },
+    env: {
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "",
+      // PS1 is unset under non-interactive bash; force it so the user
+      // sees a real prompt the moment the shell starts.
+      PS1: "\\[\\e[36m\\][sfb \\W]\\[\\e[0m\\]\\$ ",
+    },
   });
   if (input.prompt) handle.write(`${input.prompt}\n`);
   return handle;
