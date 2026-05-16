@@ -26,6 +26,14 @@ await runStartupDoctor();
 await maybeEmitClaimUrl();
 await bootstrapDefaults();
 
+// Container mode runs a single Bun process, so we also start the worker
+// loop in-band. pg-boss handlers + the Sentry-poll cron all hang off the
+// same boss instance the webhook handler publishes to. EC2 mode keeps the
+// dedicated sfb-worker.service.
+if (process.env.SFB_RUN_MODE === "container") {
+  await import("./worker/index");
+}
+
 const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
   exclude: ["/api/auth/**"],
   maskEmail: true,

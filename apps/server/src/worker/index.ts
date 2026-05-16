@@ -4,9 +4,17 @@
  * the HTTP server; pg-boss coordinates via Postgres).
  */
 import { log } from "../log";
-import { getBoss } from "../queue/boss";
-import { type AgentJob, JOB_AGENT, JOB_TRIAGE, type TriageJob } from "../queue/jobs";
+import { getBoss, scheduleRecurring } from "../queue/boss";
+import {
+  type AgentJob,
+  JOB_AGENT,
+  JOB_SENTRY_POLL,
+  JOB_TRIAGE,
+  type SentryPollJob,
+  type TriageJob,
+} from "../queue/jobs";
 import { processAgentJob } from "./agent-job";
+import { processSentryPollJob } from "./sentry-poll-job";
 import { processTriageJob } from "./triage-job";
 
 async function main(): Promise<void> {
@@ -25,6 +33,16 @@ async function main(): Promise<void> {
       await processAgentJob(job.data);
     }
   });
+
+  await boss.work<SentryPollJob>(JOB_SENTRY_POLL, async (jobs) => {
+    for (const _ of jobs) {
+      await processSentryPollJob();
+    }
+  });
+
+  // Recurring schedule: poll Sentry every 15 minutes. pg-boss upserts by
+  // name so this is safe to re-issue on every worker boot.
+  await scheduleRecurring(JOB_SENTRY_POLL, "*/15 * * * *");
 
   log.info("worker ready");
 }

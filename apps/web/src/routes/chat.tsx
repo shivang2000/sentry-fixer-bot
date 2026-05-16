@@ -15,7 +15,7 @@ import {
 } from "@sentry-fixer-bot/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { MessageSquareCode, Plus, X } from "lucide-react";
+import { MessageSquareCode, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -37,6 +37,15 @@ function ChatPage() {
 
   const create = useMutation(trpc.chat.create.mutationOptions({ onSuccess: invalidate }));
   const end = useMutation(trpc.chat.end.mutationOptions({ onSuccess: invalidate }));
+  const del = useMutation(
+    trpc.chat.delete.mutationOptions({
+      onSuccess: () => {
+        invalidate();
+        toast.success("Session deleted");
+      },
+      onError: (err) => toast.error(err.message),
+    }),
+  );
 
   const termRef = useRef<ChatTerminalHandle>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -135,16 +144,30 @@ function ChatPage() {
               (sessions.data ?? []).slice(0, 10).map((s) => (
                 <div
                   key={s.id}
-                  className={`flex items-center justify-between rounded-md border px-2 py-1.5 ${
+                  className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 ${
                     s.id === activeId ? "border-indigo-500 bg-indigo-500/10" : "border-zinc-800"
                   }`}
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate font-mono text-xs">{s.id.slice(0, 8)}</div>
                     <div className="text-xs text-zinc-500">
                       {s.repo ?? "no repo"} • {s.status}
                     </div>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Delete session"
+                    disabled={s.id === activeId || del.isPending}
+                    title={
+                      s.id === activeId
+                        ? "End the active session before deleting"
+                        : "Delete this session + its work dir"
+                    }
+                    onClick={() => del.mutate({ sessionId: s.id })}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
                 </div>
               ))
             )}

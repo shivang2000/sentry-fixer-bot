@@ -1,5 +1,6 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { chatRouter } from "./chat";
+import { ghRouter } from "./gh";
 import { mcpsRouter } from "./mcps";
 import { reposRouter } from "./repos";
 import { runsRouter } from "./runs";
@@ -21,5 +22,6 @@ export const appRouter = router({
   skills: skillsRouter,
   settings: settingsRouter,
   system: systemRouter,
+  gh: ghRouter,
 });
 export type AppRouter = typeof appRouter;

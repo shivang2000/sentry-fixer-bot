@@ -60,4 +60,30 @@ export const chatRouter = router({
         .where(and(eq(chatSessions.id, input.sessionId), eq(chatSessions.userId, ctx.user.id)));
       return { ok: true };
     }),
+
+  delete: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = createDb();
+      // Owner check: only delete the session if it belongs to the caller.
+      const owned = await db
+        .select()
+        .from(chatSessions)
+        .where(and(eq(chatSessions.id, input.sessionId), eq(chatSessions.userId, ctx.user.id)))
+        .limit(1);
+      if (owned.length === 0) return { ok: false as const, error: "not_found" };
+      await db.delete(chatSessions).where(eq(chatSessions.id, input.sessionId));
+      // Best-effort scrub of the per-session work dir on the state volume.
+      // We do this after the DB delete so a partial fs failure doesn't leave
+      // a row pointing at a gone path.
+      const base = process.env.WORK_DIR ?? "/var/lib/sfb/work";
+      try {
+        const { rm } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        await rm(join(base, input.sessionId), { recursive: true, force: true });
+      } catch {
+        // ignore — work dir might not exist yet
+      }
+      return { ok: true as const };
+    }),
 });
