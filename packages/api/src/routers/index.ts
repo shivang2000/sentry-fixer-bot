@@ -5,6 +5,7 @@ import { reposRouter } from "./repos";
 import { runsRouter } from "./runs";
 import { settingsRouter } from "./settings";
 import { skillsRouter } from "./skills";
+import { systemRouter } from "./system";
 
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => "OK"),
@@ -19,5 +20,6 @@ export const appRouter = router({
   chat: chatRouter,
   skills: skillsRouter,
   settings: settingsRouter,
+  system: systemRouter,
 });
 export type AppRouter = typeof appRouter;

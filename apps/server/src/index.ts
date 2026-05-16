@@ -11,6 +11,7 @@ import { type EvlogVariables, evlog } from "evlog/hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
+import { bootstrapDefaults } from "./bootstrap-defaults";
 import { boardClaim } from "./routes/board-claim";
 import { chatWs, websocket } from "./routes/chat-ws";
 import { health } from "./routes/health";
@@ -23,6 +24,7 @@ initLogger({
 await bootstrapLocalTrustedAdmin();
 await runStartupDoctor();
 await maybeEmitClaimUrl();
+await bootstrapDefaults();
 
 const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
   exclude: ["/api/auth/**"],

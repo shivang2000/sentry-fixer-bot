@@ -24,6 +24,7 @@ import { ExternalLink, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { CommandRunner } from "@/components/command-runner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { XtermPanel, type XtermPanelHandle } from "@/components/xterm-panel";
 import { trpc } from "@/utils/trpc";
@@ -102,6 +103,7 @@ function SkillsPage() {
           <TabsTrigger value="builtin">Built-in</TabsTrigger>
           <TabsTrigger value="custom">Custom upload</TabsTrigger>
           <TabsTrigger value="sh">skills.sh</TabsTrigger>
+          <TabsTrigger value="git">Git URL</TabsTrigger>
           <TabsTrigger value="installed">
             Installed{installed.data ? ` (${installed.data.length})` : ""}
           </TabsTrigger>
@@ -180,6 +182,20 @@ function SkillsPage() {
               {shList.data.results.length} result(s). (Render TBD when API contract is firm.)
             </p>
           )}
+        </TabsContent>
+
+        <TabsContent value="git" className="mt-4 space-y-4">
+          <GitInstallForm
+            onInstalled={() => {
+              qc.invalidateQueries({ queryKey: trpc.skills.list.queryKey() });
+            }}
+          />
+          <CommandRunner
+            title="Run a command on the state volume"
+            description="Allowlisted: npm / npx / pnpm / bun / git clone. Use this for one-off installs that don't fit the form above."
+            placeholder="git clone --depth 1 https://github.com/obra/superpowers"
+            onSuccess={() => qc.invalidateQueries({ queryKey: trpc.skills.list.queryKey() })}
+          />
         </TabsContent>
 
         <TabsContent value="installed" className="mt-4">
@@ -311,5 +327,81 @@ function SharedLog({ termRef }: { termRef: React.RefObject<XtermPanelHandle | nu
       <Label className="text-xs">Install log</Label>
       <XtermPanel ref={termRef} rows={8} initialBanner="Ready.\r\n" />
     </div>
+  );
+}
+
+function GitInstallForm({ onInstalled }: { onInstalled: () => void }) {
+  const [url, setUrl] = useState("");
+  const [ref, setRef] = useState("");
+  const [name, setName] = useState("");
+  const mutate = useMutation(
+    trpc.skills.installFromGit.mutationOptions({
+      onSuccess: () => {
+        toast.success("Skill cloned");
+        setUrl("");
+        setRef("");
+        setName("");
+        onInstalled();
+      },
+      onError: (err) => toast.error(err.message),
+    }),
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Install from a git URL</CardTitle>
+        <CardDescription>
+          Shallow-clones the repo into the state volume's skills dir and registers an install row.
+          Only https://github.com/ and https://gitlab.com/ URLs are accepted.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="git-url">Repository URL</Label>
+          <Input
+            id="git-url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://github.com/obra/superpowers"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="git-ref">Ref (optional)</Label>
+            <Input
+              id="git-ref"
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+              placeholder="main"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="git-name">Display name (optional)</Label>
+            <Input
+              id="git-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="superpowers"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            disabled={!url.trim() || mutate.isPending}
+            onClick={() =>
+              mutate.mutate({
+                url: url.trim(),
+                ref: ref.trim() || undefined,
+                name: name.trim() || undefined,
+                scope: "global",
+              })
+            }
+          >
+            {mutate.isPending ? "Cloning…" : "Install"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

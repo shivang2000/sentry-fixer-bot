@@ -7,10 +7,17 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { adminProcedure, protectedProcedure, router } from "../index";
+import { runCommand } from "../run/npm-runner";
 import { SKILLS_CATALOG } from "../skills-catalog";
 import { safeExtractZip, validateZipBuffer } from "../skills-zip";
 
-const SKILLS_DIR = process.env.SFB_SKILLS_DIR ?? "/var/lib/sfb/skills";
+function defaultSkillsDir(): string {
+  if (process.env.SFB_SKILLS_DIR) return process.env.SFB_SKILLS_DIR;
+  if (process.env.SFB_STATE_DIR) return `${process.env.SFB_STATE_DIR}/skills`;
+  return "/var/lib/sfb/skills";
+}
+
+const SKILLS_DIR = defaultSkillsDir();
 const SH_BASE = "https://www.skills.sh";
 const SH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -185,6 +192,71 @@ export const skillsRouter = router({
           sourceRef: input.slug,
           name: input.slug,
           description: null,
+          storagePath: target,
+          installedBy: ctx.user.id,
+        })
+        .returning();
+      return { ok: true as const, row: inserted[0] };
+    }),
+
+  installFromGit: adminProcedure
+    .input(
+      z.object({
+        url: z
+          .string()
+          .url()
+          .regex(/^https:\/\/(?:github|gitlab)\.com\//, "url_must_be_github_or_gitlab_https"),
+        ref: z.string().optional(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        scope: SCOPE,
+        repo: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (input.scope === "repo" && !input.repo) {
+        throw new Error("repo_required_for_repo_scope");
+      }
+      const installId = crypto.randomUUID();
+      const target = join(SKILLS_DIR, installId);
+      await mkdir(target, { recursive: true });
+
+      // Shallow clone into the install dir. The git allowlist in
+      // runCommand only permits `git clone …`, so this is safe.
+      const args = ["clone", "--depth", "1"];
+      if (input.ref) args.push("--branch", input.ref);
+      args.push(input.url, target);
+      const result = await runCommand({
+        command: `git ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`,
+      });
+      if (result.exitCode !== 0) {
+        await rm(target, { recursive: true, force: true });
+        throw new Error(
+          `git_clone_failed:${result.stderr.slice(0, 500).replace(/\s+/g, " ").trim()}`,
+        );
+      }
+
+      // Derive a display name: explicit override, else last URL segment.
+      const inferredName =
+        input.name ??
+        input.url
+          .replace(/\.git$/, "")
+          .split("/")
+          .filter(Boolean)
+          .pop() ??
+        "skill";
+
+      const db = createDb();
+      const inserted = await db
+        .insert(skillInstalls)
+        .values({
+          id: installId,
+          scope: input.scope,
+          repo: input.repo ?? null,
+          sourceType: "git",
+          sourceRef: input.ref ? `${input.url}@${input.ref}` : input.url,
+          name: inferredName,
+          description: input.description ?? null,
           storagePath: target,
           installedBy: ctx.user.id,
         })

@@ -22,6 +22,7 @@ import { ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { CommandRunner } from "@/components/command-runner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { McpInstallDialog } from "@/components/mcp-install-dialog";
 import { trpc } from "@/utils/trpc";
@@ -61,6 +62,7 @@ function McpsPage() {
           <TabsTrigger value="installed">
             Installed{installed.data ? ` (${installed.data.length})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="run">Run command</TabsTrigger>
         </TabsList>
 
         <TabsContent value="catalog" className="mt-4">
@@ -152,6 +154,15 @@ function McpsPage() {
               </TableBody>
             </Table>
           )}
+        </TabsContent>
+
+        <TabsContent value="run" className="mt-4">
+          <CommandRunner
+            title="Install an MCP via npm / npx"
+            description="Paste any npm/npx/pnpm/bun/git command. Runs as sfb-runner against /sfb/state/home so installs persist on the state volume."
+            placeholder="npx -y @sentry/mcp-server --help"
+            onSuccess={() => qc.invalidateQueries({ queryKey: trpc.mcps.installed.queryKey() })}
+          />
         </TabsContent>
       </Tabs>
 
