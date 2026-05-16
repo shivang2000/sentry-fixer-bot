@@ -45,19 +45,29 @@ RUN install -d -o sfb-runner -g sfb-runner \
       /opt/sfb/current/packages/env/node_modules \
       /opt/sfb/current/packages/ui/node_modules
 
-# Pre-create credential + env-file dirs as sfb-runner so the named volumes
-# (sfb_dev_claude, sfb_dev_gh, sfb_dev_etc_sfb in docker-compose.dev.yml)
-# inherit the correct ownership on first up. Without this the volumes mount
-# as root-owned and the sfb-runner subprocess cannot write into them.
+# /sfb/state is the SINGLE persistent volume that holds every piece of
+# mutable per-instance state — sfb-runner's HOME (so every CLI's dotfiles
+# naturally land in the volume: .claude, .config/gh, .codex, .opencloud,
+# .npm, .cache), the UI-mutated env file under etc/env, per-session work
+# dirs, and uploaded skills. One named volume = one disk artefact to
+# backup later, no per-tool wiring as we add more CLIs.
 RUN install -d -o sfb-runner -g sfb-runner -m 0700 \
-      /home/sfb-runner/.claude \
-      /home/sfb-runner/.config \
-      /home/sfb-runner/.config/gh \
- && install -d -o root -g sfb-runner -m 0770 /etc/sfb
+      /sfb \
+      /sfb/state \
+      /sfb/state/home \
+      /sfb/state/home/.claude \
+      /sfb/state/home/.config \
+      /sfb/state/home/.config/gh \
+      /sfb/state/home/.npm \
+      /sfb/state/home/.cache \
+      /sfb/state/work \
+      /sfb/state/skills \
+ && install -d -o root -g sfb-runner -m 0770 /sfb/state/etc
 
 WORKDIR /opt/sfb/current
 
 ENV SFB_RUN_MODE=container \
+    SFB_STATE_DIR=/sfb/state \
     NODE_ENV=development \
     PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 

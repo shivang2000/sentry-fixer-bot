@@ -36,9 +36,9 @@ export function OAuthCard({ url, onSubmit, onCancel }: Props) {
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1.5 break-all rounded-md border border-amber-500/30 bg-zinc-900/60 px-3 py-2 font-mono text-amber-200 text-xs hover:bg-zinc-900"
+          className="flex items-start gap-1.5 break-all rounded-md border border-amber-500/30 bg-zinc-900/60 px-3 py-2 font-mono text-amber-200 text-xs hover:bg-zinc-900"
         >
-          {url}
+          <span className="min-w-0 flex-1 break-all">{url}</span>
           <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
         </a>
         <div className="space-y-1.5">

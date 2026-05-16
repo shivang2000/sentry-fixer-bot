@@ -9,6 +9,7 @@ export type XtermPanelHandle = {
   clear: () => void;
   fit: () => void;
   focus: () => void;
+  size: () => { cols: number; rows: number };
 };
 
 type Props = {
@@ -106,6 +107,10 @@ export const XtermPanel = forwardRef<XtermPanelHandle, Props>(function XtermPane
         }
       },
       focus: () => termRef.current?.focus(),
+      size: () => ({
+        cols: termRef.current?.cols ?? 80,
+        rows: termRef.current?.rows ?? 24,
+      }),
     }),
     [],
   );

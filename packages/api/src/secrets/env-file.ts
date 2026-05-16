@@ -8,7 +8,9 @@ const PROD_FILE = "/etc/sfb/env";
 const DEV_FILE = "apps/server/.env.local";
 
 function targetFile(): string {
-  if (process.env.SFB_RUN_MODE === "container") return "/etc/sfb/env";
+  if (process.env.SFB_RUN_MODE === "container") {
+    return process.env.SFB_ENV_FILE ?? "/sfb/state/etc/env";
+  }
   return env.NODE_ENV === "production" ? PROD_FILE : DEV_FILE;
 }
 

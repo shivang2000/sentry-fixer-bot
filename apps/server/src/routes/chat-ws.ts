@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { createDb } from "@sentry-fixer-bot/db";
 import { chatMessages, chatSessions } from "@sentry-fixer-bot/db/schema/admin";
 import { eq } from "drizzle-orm";
@@ -11,6 +13,31 @@ const { upgradeWebSocket, websocket } = createBunWebSocket();
 
 export const chatWs = new Hono();
 
+// Per-session work dir on the state volume. Each chat session gets its
+// own subdir so claude / agent transcripts / scratch don't collide. The
+// dir survives container restarts (it's on /sfb/state in container mode
+// or /var/lib/sfb in EC2 mode).
+function workDirFor(sessionId: string): string {
+  const base = process.env.WORK_DIR ?? "/var/lib/sfb/work";
+  return join(base, sessionId);
+}
+
+type ClientMsg =
+  | { type: "init"; cols?: number; rows?: number }
+  | { type: "stdin"; data: string }
+  | { type: "resize"; cols: number; rows: number }
+  | { type: "oauth_response"; code: string }
+  | { type: "user_input"; data: string }; // legacy
+
+function parseClientMsg(raw: ArrayBuffer | string): ClientMsg | null {
+  const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw as ArrayBuffer);
+  try {
+    return JSON.parse(text) as ClientMsg;
+  } catch {
+    return null;
+  }
+}
+
 chatWs.get(
   "/api/chat/:sessionId",
   upgradeWebSocket((c) => {
@@ -19,60 +46,97 @@ chatWs.get(
     const sessionId: string = sessionIdRaw;
     let handle: PtyHandle | null = null;
     let outBuffer = "";
+    let startFn: ((cols?: number, rows?: number) => Promise<void>) | null = null;
     const db = createDb();
 
     return {
       async onOpen(_evt, ws) {
-        try {
-          handle = spawnClaudeInteractive({ cwd: process.cwd(), prompt: "" });
-        } catch (e) {
-          log.error({ err: e instanceof Error ? e.message : e }, "chat: spawn failed");
-          ws.send(JSON.stringify({ type: "error", message: "spawn_failed" }));
-          ws.close();
+        const wireStreams = (h: PtyHandle) => {
+          h.proc.stdout.on("data", (chunk: Buffer) => {
+            const text = chunk.toString("utf8");
+            outBuffer += text;
+            if (outBuffer.length > 32_000) outBuffer = outBuffer.slice(-16_000);
+            ws.send(JSON.stringify({ type: "stdout", data: text }));
+            const oauth = detectOAuthPrompt(outBuffer);
+            if (oauth) {
+              ws.send(JSON.stringify({ type: "oauth_url", url: oauth.url, sessionId }));
+              outBuffer = "";
+            }
+          });
+          h.proc.stderr.on("data", (chunk: Buffer) => {
+            ws.send(JSON.stringify({ type: "stdout", data: chunk.toString("utf8") }));
+          });
+          h.proc.on("exit", async (code) => {
+            ws.send(JSON.stringify({ type: "exit", code }));
+            await db
+              .update(chatSessions)
+              .set({ status: "exited", endedAt: new Date() })
+              .where(eq(chatSessions.id, sessionId));
+          });
+        };
+
+        startFn = async (cols?: number, rows?: number) => {
+          if (handle) return;
+          const cwd = workDirFor(sessionId);
+          await mkdir(cwd, { recursive: true }).catch(() => undefined);
+          handle = spawnClaudeInteractive({ cwd, prompt: "", cols, rows });
+          await db
+            .update(chatSessions)
+            .set({ status: "running", pid: handle.proc.pid ?? null })
+            .where(eq(chatSessions.id, sessionId));
+          wireStreams(handle);
+        };
+
+        // If the client never sends init (broken or legacy), spawn after
+        // 2s with a default size so we don't hang the WS forever.
+        setTimeout(() => {
+          if (!handle && startFn) startFn().catch(() => undefined);
+        }, 2000);
+
+        ws.send(JSON.stringify({ type: "ready", sessionId }));
+      },
+
+      async onMessage(evt, ws) {
+        const msg = parseClientMsg(evt.data as ArrayBuffer | string);
+        if (!msg) return;
+
+        if (msg.type === "init") {
+          try {
+            await startFn?.(msg.cols, msg.rows);
+          } catch (e) {
+            log.error({ err: e instanceof Error ? e.message : e }, "chat: spawn failed");
+            ws.send(JSON.stringify({ type: "error", message: "spawn_failed" }));
+            ws.close();
+          }
           return;
         }
 
-        await db
-          .update(chatSessions)
-          .set({ status: "running", pid: handle.proc.pid ?? null })
-          .where(eq(chatSessions.id, sessionId));
-
-        handle.proc.stdout.on("data", (chunk: Buffer) => {
-          const text = chunk.toString("utf8");
-          outBuffer += text;
-          ws.send(JSON.stringify({ type: "stdout", data: text }));
-          const oauth = detectOAuthPrompt(outBuffer);
-          if (oauth) {
-            ws.send(JSON.stringify({ type: "oauth_url", url: oauth.url, sessionId }));
-            outBuffer = "";
-          }
-        });
-        handle.proc.stderr.on("data", (chunk: Buffer) => {
-          ws.send(JSON.stringify({ type: "stdout", data: chunk.toString("utf8") }));
-        });
-        handle.proc.on("exit", async (code) => {
-          ws.send(JSON.stringify({ type: "exit", code }));
-          await db
-            .update(chatSessions)
-            .set({ status: "exited", endedAt: new Date() })
-            .where(eq(chatSessions.id, sessionId));
-        });
-      },
-
-      async onMessage(evt, _ws) {
         if (!handle) return;
-        const raw =
-          typeof evt.data === "string"
-            ? evt.data
-            : new TextDecoder().decode(evt.data as ArrayBuffer);
-        const msg = JSON.parse(raw) as { type: string; data?: string; code?: string };
+
+        // Raw keystrokes from xterm (arrows, ctrl-keys, plain chars, etc.)
+        // are forwarded byte-for-byte. No `\n` injection — xterm sends
+        // the actual key including the CR when the user presses Enter.
+        if (msg.type === "stdin") handle.write(msg.data);
+
+        // Legacy line-buffered protocol kept while we migrate clients.
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
+
         if (msg.type === "oauth_response" && msg.code) handle.write(`${msg.code}\n`);
-        await db.insert(chatMessages).values({
-          sessionId,
-          role: msg.type === "oauth_response" ? "oauth_response" : "user",
-          content: msg.data ?? msg.code ?? "",
-        });
+
+        // Live resize not supported by util-linux script(1). Recorded for
+        // the next spawn — clients that really need a different size
+        // should reconnect (closing + reopening the WS).
+        if (msg.type === "resize") {
+          log.info({ cols: msg.cols, rows: msg.rows }, "chat: resize requested (deferred)");
+        }
+
+        if (msg.type === "stdin" || msg.type === "user_input" || msg.type === "oauth_response") {
+          await db.insert(chatMessages).values({
+            sessionId,
+            role: msg.type === "oauth_response" ? "oauth_response" : "user",
+            content: msg.type === "oauth_response" ? msg.code : msg.data,
+          });
+        }
       },
 
       async onClose() {
@@ -86,13 +150,13 @@ chatWs.get(
   }),
 );
 
-// --- Login WS routes: drive `claude /login` or `gh auth login` ---------------
+// --- Login WS routes: drive `claude setup-token` or `gh auth login` ---------
 //
-// Both reuse the same PTY + URL-detector machinery. Clients pass `?provider=…`
-// in the URL; the handler picks the command, streams stdout, surfaces OAuth
-// URLs via the same `oauth_url` message, and forwards `oauth_response` codes
-// to the child's stdin. Sessions are not persisted to chat_sessions — these
-// are short-lived auth flows.
+// Both reuse the same PTY + URL-detector machinery. `?provider=…` picks
+// the command, server streams stdout, surfaces OAuth URLs via the same
+// `oauth_url` message, forwards `oauth_response` codes to the child's
+// stdin. Sessions are not persisted to chat_sessions — these are
+// short-lived auth flows.
 
 function loginSpawn(provider: "claude" | "github"): PtyHandle {
   if (provider === "claude") {
@@ -136,6 +200,7 @@ chatWs.get(
         handle.proc.stdout.on("data", (chunk: Buffer) => {
           const text = chunk.toString("utf8");
           outBuffer += text;
+          if (outBuffer.length > 32_000) outBuffer = outBuffer.slice(-16_000);
           ws.send(JSON.stringify({ type: "stdout", data: text }));
           const oauth = detectOAuthPrompt(outBuffer);
           if (oauth) {
@@ -152,12 +217,9 @@ chatWs.get(
       },
 
       onMessage(evt, _ws) {
-        if (!handle) return;
-        const raw =
-          typeof evt.data === "string"
-            ? evt.data
-            : new TextDecoder().decode(evt.data as ArrayBuffer);
-        const msg = JSON.parse(raw) as { type: string; data?: string; code?: string };
+        const msg = parseClientMsg(evt.data as ArrayBuffer | string);
+        if (!msg || !handle) return;
+        if (msg.type === "stdin") handle.write(msg.data);
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
         if (msg.type === "oauth_response" && msg.code) handle.write(`${msg.code}\n`);
       },
