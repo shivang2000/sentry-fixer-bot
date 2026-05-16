@@ -77,17 +77,24 @@ export function spawnClaudeInteractive(input: {
   cols?: number;
   rows?: number;
 }): PtyHandle {
+  // Start the session in claude, but drop to a real login bash after the
+  // user exits claude. They get the best of both: claude on arrival
+  // (matches the bot's primary purpose) and an SSH-style shell when
+  // they need to `gh auth login`, install an MCP, tail a log, etc.
+  // `exec bash --login` makes bash inherit the PTY so script(1) doesn't
+  // double-fork on session close.
+  const claudeBin = env.CLAUDE_BIN ?? "claude";
+  const claudeArgs = "--dangerously-skip-permissions";
+  const claudeModel = env.CLAUDE_MODEL;
+  const initLine = `${claudeBin} ${claudeArgs} --model ${claudeModel}; exec bash --login`;
   const handle = spawnPtyCommand({
     cmd: "/bin/bash",
-    args: ["--login"],
+    args: ["-c", initLine],
     cwd: input.cwd,
     cols: input.cols,
     rows: input.rows,
     env: {
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "",
-      // PS1 is unset under non-interactive bash; force it so the user
-      // sees a real prompt the moment the shell starts.
-      PS1: "\\[\\e[36m\\][sfb \\W]\\[\\e[0m\\]\\$ ",
     },
   });
   if (input.prompt) handle.write(`${input.prompt}\n`);
