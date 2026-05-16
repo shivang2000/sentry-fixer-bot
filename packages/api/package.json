@@ -16,12 +16,14 @@
     "@sentry-fixer-bot/env": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
+    "adm-zip": "^0.5.17",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@sentry-fixer-bot/config": "workspace:*",
+    "@types/adm-zip": "^0.5.8",
     "@types/bun": "catalog:",
     "hono": "catalog:",
     "typescript": "catalog:"

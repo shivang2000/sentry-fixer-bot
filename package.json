@@ -50,6 +50,7 @@
     "@types/bun": "catalog:",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.2",
+    "shadcn": "^4.7.0",
     "turbo": "^2.8.12",
     "typescript": "catalog:"
   },

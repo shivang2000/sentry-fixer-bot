@@ -24,6 +24,12 @@ export const reposRouter = router({
     return db.select().from(reposConfig).orderBy(reposConfig.sentryProject);
   }),
 
+  byId: protectedProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+    const db = createDb();
+    const rows = await db.select().from(reposConfig).where(eq(reposConfig.id, input.id)).limit(1);
+    return rows[0] ?? null;
+  }),
+
   create: adminProcedure.input(Input).mutation(async ({ input, ctx }) => {
     const db = createDb();
     const inserted = await db

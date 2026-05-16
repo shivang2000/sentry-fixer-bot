@@ -9,12 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as RunsRouteImport } from './routes/runs'
 import { Route as ReposRouteImport } from './routes/repos'
+import { Route as McpsRouteImport } from './routes/mcps'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ReposIdRouteImport } from './routes/repos.$id'
 
+const SkillsRoute = SkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RunsRoute = RunsRouteImport.update({
   id: '/runs',
   path: '/runs',
@@ -23,6 +32,11 @@ const RunsRoute = RunsRouteImport.update({
 const ReposRoute = ReposRouteImport.update({
   id: '/repos',
   path: '/repos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpsRoute = McpsRouteImport.update({
+  id: '/mcps',
+  path: '/mcps',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -35,52 +49,112 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReposIdRoute = ReposIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ReposRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/repos': typeof ReposRoute
+  '/mcps': typeof McpsRoute
+  '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/skills': typeof SkillsRoute
+  '/repos/$id': typeof ReposIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/repos': typeof ReposRoute
+  '/mcps': typeof McpsRoute
+  '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/skills': typeof SkillsRoute
+  '/repos/$id': typeof ReposIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/repos': typeof ReposRoute
+  '/mcps': typeof McpsRoute
+  '/repos': typeof ReposRouteWithChildren
   '/runs': typeof RunsRoute
+  '/skills': typeof SkillsRoute
+  '/repos/$id': typeof ReposIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/repos' | '/runs'
+  fullPaths:
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/mcps'
+    | '/repos'
+    | '/runs'
+    | '/skills'
+    | '/repos/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/repos' | '/runs'
-  id: '__root__' | '/' | '/dashboard' | '/login' | '/repos' | '/runs'
+  to:
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/mcps'
+    | '/repos'
+    | '/runs'
+    | '/skills'
+    | '/repos/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/mcps'
+    | '/repos'
+    | '/runs'
+    | '/skills'
+    | '/repos/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ChatRoute: typeof ChatRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
-  ReposRoute: typeof ReposRoute
+  McpsRoute: typeof McpsRoute
+  ReposRoute: typeof ReposRouteWithChildren
   RunsRoute: typeof RunsRoute
+  SkillsRoute: typeof SkillsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/skills': {
+      id: '/skills'
+      path: '/skills'
+      fullPath: '/skills'
+      preLoaderRoute: typeof SkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/runs': {
       id: '/runs'
       path: '/runs'
@@ -93,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/repos'
       fullPath: '/repos'
       preLoaderRoute: typeof ReposRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcps': {
+      id: '/mcps'
+      path: '/mcps'
+      fullPath: '/mcps'
+      preLoaderRoute: typeof McpsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -109,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -116,15 +204,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/repos/$id': {
+      id: '/repos/$id'
+      path: '/$id'
+      fullPath: '/repos/$id'
+      preLoaderRoute: typeof ReposIdRouteImport
+      parentRoute: typeof ReposRoute
+    }
   }
 }
 
+interface ReposRouteChildren {
+  ReposIdRoute: typeof ReposIdRoute
+}
+
+const ReposRouteChildren: ReposRouteChildren = {
+  ReposIdRoute: ReposIdRoute,
+}
+
+const ReposRouteWithChildren = ReposRoute._addFileChildren(ReposRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ChatRoute: ChatRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
-  ReposRoute: ReposRoute,
+  McpsRoute: McpsRoute,
+  ReposRoute: ReposRouteWithChildren,
   RunsRoute: RunsRoute,
+  SkillsRoute: SkillsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
