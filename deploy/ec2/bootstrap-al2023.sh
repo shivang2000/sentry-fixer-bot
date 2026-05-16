@@ -43,6 +43,19 @@ ARCH="$(uname -m)"  # x86_64 or aarch64
 
 log() { echo "==> $*"; }
 
+# dnf install wrapper. In container builds (BuildKit) the post-install
+# scriptlets that touch systemd return non-zero even when every package
+# installs cleanly, which surfaces as exit code 2 from dnf and aborts
+# the build. Skip scriptlets in container mode; on a real EC2 they
+# matter and run normally.
+dnf_install() {
+  if [[ "$IN_CONTAINER" -eq 1 ]]; then
+    dnf -y -q install --setopt=tsflags=noscripts "$@"
+  else
+    dnf -y -q install "$@"
+  fi
+}
+
 # ---------- system packages ----------
 # Note: AL2023 ships curl-minimal + ca-certificates preinstalled; the full
 # curl package conflicts with curl-minimal, so we omit both.
@@ -50,7 +63,7 @@ log() { echo "==> $*"; }
 # images (including docker amazonlinux:2023) ship without it.
 log "dnf base packages"
 dnf -y -q update --allowerasing
-dnf -y -q install --allowerasing \
+dnf_install --allowerasing \
   git tar gzip unzip jq which procps-ng \
   nginx \
   postgresql15 \
@@ -75,7 +88,7 @@ fi
 # ---------- Docker ----------
 if ! command -v docker >/dev/null 2>&1; then
   log "installing docker"
-  dnf -y -q install docker
+  dnf_install docker
 fi
 systemctl enable --now docker
 usermod -aG docker "$LOGIN_USER" || true
@@ -101,11 +114,11 @@ fi
 if ! command -v gh >/dev/null 2>&1; then
   log "installing gh"
   # The official repo is RPM-based and works on AL2023.
-  dnf -y -q install 'dnf-command(config-manager)'
+  dnf_install 'dnf-command(config-manager)'
   dnf -y -q config-manager addrepo \
     --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo \
     || dnf -y -q config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-  dnf -y -q install gh --repo gh-cli
+  dnf_install gh --repo gh-cli
 fi
 
 # ---------- nvm + Node LTS + npm ----------

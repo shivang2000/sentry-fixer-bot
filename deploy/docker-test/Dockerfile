@@ -11,11 +11,11 @@ ARG SFB_REPO_BRANCH=main
 # pull the latest commit from the repo when rebuilding.
 ARG SFB_REV=main
 
-# Install OS dependencies via the shared bootstrap script. We fetch it
-# from the public repo first (one tiny curl) so the base layer doesn't
-# depend on a build context at all.
-RUN dnf -y install --allowerasing tar gzip git \
-    && curl -fsSL "https://raw.githubusercontent.com/shivang2000/sentry-fixer-bot/${SFB_REPO_BRANCH}/deploy/ec2/bootstrap-al2023.sh" -o /tmp/bootstrap.sh \
+# amazonlinux:2023 ships bash + curl-minimal preinstalled — enough to
+# fetch and run bootstrap-al2023.sh, which installs everything else
+# (git, gh, docker CLI, nvm + Node, npm, bun, claude, AWS CLI, nginx,
+# postgres-client, jq, unzip, ...).
+RUN curl -fsSL "https://raw.githubusercontent.com/shivang2000/sentry-fixer-bot/${SFB_REPO_BRANCH}/deploy/ec2/bootstrap-al2023.sh" -o /tmp/bootstrap.sh \
     && bash /tmp/bootstrap.sh \
     && rm -f /tmp/bootstrap.sh
 
