@@ -22,15 +22,27 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-# Detect container environments (docker, podman, CI) so we can skip the
-# systemd-dependent steps that would fail without PID 1 = systemd.
+# Detect environments without a real init system so we can skip the
+# systemd-dependent steps (and dnf scriptlets that talk to systemd).
+# This catches `docker run`, `docker build` / BuildKit, podman, and CI
+# runners — anywhere PID 1 is not systemd. The /.dockerenv check by
+# itself misses BuildKit because /.dockerenv is only created by the
+# runtime at `docker run`, not during a build.
 in_container() {
-  [[ -f /.dockerenv ]] || grep -qE 'docker|containerd|podman|kubepods' /proc/1/cgroup 2>/dev/null
+  [[ -f /.dockerenv ]] && return 0
+  [[ -f /run/.containerenv ]] && return 0
+  if grep -qE 'docker|containerd|podman|kubepods|buildkit' /proc/1/cgroup 2>/dev/null; then
+    return 0
+  fi
+  if ! pidof systemd >/dev/null 2>&1 && [[ "$(readlink /proc/1/exe 2>/dev/null)" != */systemd* ]]; then
+    return 0
+  fi
+  return 1
 }
 IN_CONTAINER=0
 if in_container; then
   IN_CONTAINER=1
-  echo "==> container environment detected — systemctl + service enables will be skipped"
+  echo "==> container environment detected — systemctl + dnf scriptlets will be skipped"
 fi
 
 # Stub systemctl when inside a container without systemd so the rest of the

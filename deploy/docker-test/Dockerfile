@@ -15,9 +15,8 @@ ARG SFB_REV=main
 # fetch and run bootstrap-al2023.sh, which installs everything else
 # (git, gh, docker CLI, nvm + Node, npm, bun, claude, AWS CLI, nginx,
 # postgres-client, jq, unzip, ...).
-RUN curl -fsSL "https://raw.githubusercontent.com/shivang2000/sentry-fixer-bot/${SFB_REPO_BRANCH}/deploy/ec2/bootstrap-al2023.sh" -o /tmp/bootstrap.sh \
-    && bash /tmp/bootstrap.sh \
-    && rm -f /tmp/bootstrap.sh
+RUN curl -fsSL "https://raw.githubusercontent.com/shivang2000/sentry-fixer-bot/${SFB_REPO_BRANCH}/deploy/ec2/bootstrap-al2023.sh" -o /tmp/bootstrap.sh
+RUN bash /tmp/bootstrap.sh && rm -f /tmp/bootstrap.sh
 
 # Clone the repo into /opt/sfb/current as sfb-runner. The SFB_REV ARG
 # invalidates this layer when you want a fresh pull.
