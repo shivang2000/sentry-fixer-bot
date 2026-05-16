@@ -13,6 +13,8 @@
 # Testing
 # Turbo
 *.log
+*.pem
+*.key
 *.swo
 *.swp
 *.tgz
