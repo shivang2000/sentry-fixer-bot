@@ -5,10 +5,11 @@ import { sql } from "drizzle-orm";
 import { adminProcedure, protectedProcedure, router } from "../index";
 import { claudeAuthStatus, claudeMcpList } from "../run/claude-runner";
 import { ghAuthStatus } from "../run/gh-runner";
+import { sentryAuthStatus } from "../run/sentry-runner";
 import { hasEnvSecret } from "../secrets/env-file";
 
 export type SetupStep = {
-  id: "claude" | "github" | "sentry" | "mcp";
+  id: "claude" | "github" | "sentry";
   label: string;
   done: boolean;
   detail: string;
@@ -28,17 +29,25 @@ export type SetupStatus = {
  * the health_snapshots table so the dashboard can render in O(1).
  */
 export async function computeSetupStatus(): Promise<SetupStatus> {
-  const [claude, gh] = await Promise.all([
+  const [claude, gh, sentry] = await Promise.all([
     claudeAuthStatus().catch(() => ({ loggedIn: false }) as { loggedIn: false }),
     ghAuthStatus().catch(() => ({ authenticated: false }) as { authenticated: false }),
+    sentryAuthStatus().catch(() => ({ loggedIn: false }) as { loggedIn: false }),
   ]);
 
   const claudeAccount = "account" in claude ? claude.account : undefined;
   const githubLoggedIn = gh.authenticated || Boolean(process.env.GITHUB_APP_ID);
 
+  // Sentry is considered configured if EITHER the CLI is logged in
+  // (sentry auth status returns loggedIn:true) OR the env-file path
+  // has both legacy keys pasted. CLI takes precedence — operator who
+  // ran `sentry auth login` should see green without also pasting
+  // SENTRY_API_TOKEN manually.
+  const sentryCliLoggedIn = sentry.loggedIn;
   const sentryTokenSet = hasEnvSecret("SENTRY_API_TOKEN");
   const sentryOrgSet = hasEnvSecret("SENTRY_ORG_SLUG");
-  const sentryConfigured = sentryTokenSet && sentryOrgSet;
+  const sentryConfigured = sentryCliLoggedIn || (sentryTokenSet && sentryOrgSet);
+  const sentryAccount = "account" in sentry ? sentry.account : undefined;
 
   const db = createDb();
   const installed = await db.select({ catalogId: mcpInstalls.catalogId }).from(mcpInstalls);
@@ -53,7 +62,6 @@ export async function computeSetupStatus(): Promise<SetupStatus> {
   const reported = new Set(mcpList.entries.filter((e) => e.ok).map((e) => e.name));
   const mcpReady = [...expected].filter((id) => reported.has(id));
   const mcpMissing = [...expected].filter((id) => !reported.has(id));
-  const mcpDone = expected.size > 0 && mcpMissing.length === 0;
 
   const steps: SetupStep[] = [
     {
@@ -79,20 +87,11 @@ export async function computeSetupStatus(): Promise<SetupStatus> {
       label: "Configure Sentry",
       done: sentryConfigured,
       detail: sentryConfigured
-        ? "API token + org slug present"
-        : `Paste ${sentryTokenSet ? "" : "SENTRY_API_TOKEN, "}${sentryOrgSet ? "" : "SENTRY_ORG_SLUG "}via /settings.`,
+        ? sentryCliLoggedIn
+          ? `Signed in via sentry CLI${sentryAccount ? ` (${sentryAccount})` : ""}`
+          : "API token + org slug present"
+        : `Run \`sentry auth login\` in the wizard shell, or paste ${sentryTokenSet ? "" : "SENTRY_API_TOKEN, "}${sentryOrgSet ? "" : "SENTRY_ORG_SLUG "}via /settings.`,
       actionHref: "/settings",
-    },
-    {
-      id: "mcp",
-      label: "MCP servers ready",
-      done: mcpDone,
-      detail: mcpDone
-        ? `${mcpReady.length} MCP server(s) connected: ${mcpReady.join(", ")}`
-        : mcpMissing.length > 0
-          ? `Missing: ${mcpMissing.join(", ")} — see /doctor`
-          : "No MCPs registered yet — visit /mcps",
-      actionHref: "/doctor",
     },
   ];
 

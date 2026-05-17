@@ -27,6 +27,15 @@ export const XtermPanel = forwardRef<XtermPanelHandle, Props>(function XtermPane
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
 
+  // Stash mutable props in refs so the init effect runs exactly once.
+  // Parent re-renders (e.g. tanstack-query polling every 3s) re-create
+  // the inline `onInput` arrow → dep change → terminal disposed +
+  // recreated → all streamed stdout lost. Refs decouple the latest
+  // callback from the effect's identity.
+  const onInputRef = useRef(onInput);
+  onInputRef.current = onInput;
+  const initialBannerRef = useRef(initialBanner);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -66,14 +75,12 @@ export const XtermPanel = forwardRef<XtermPanelHandle, Props>(function XtermPane
       // Fit can throw before layout settles; safe to ignore on first paint.
     }
 
-    if (initialBanner) {
-      term.write(initialBanner);
-    }
+    const banner = initialBannerRef.current;
+    if (banner) term.write(banner);
 
-    const onInputHandler = onInput;
-    if (onInputHandler) {
-      term.onData((data) => onInputHandler(data));
-    }
+    term.onData((data) => {
+      onInputRef.current?.(data);
+    });
 
     const onResize = () => {
       try {
@@ -93,7 +100,10 @@ export const XtermPanel = forwardRef<XtermPanelHandle, Props>(function XtermPane
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [initialBanner, onInput, rows]);
+    // Intentionally empty deps: terminal lives for the lifetime of the
+    // mounted component. Re-running on prop changes wipes scrollback.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  }, []);
 
   useImperativeHandle(
     ref,

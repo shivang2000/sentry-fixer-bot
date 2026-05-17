@@ -7,7 +7,11 @@ export type PtyHandle = {
   kill: () => void;
 };
 
-const DEFAULT_COLS = 140;
+// Wide PTY so login URLs from claude / gh / sentry-cli print on a
+// single line. Wrapping inside a URL means the OAuth-URL detector
+// has to reassemble across `\r\n`, which is unreliable when the next
+// line starts with a valid URL_CHAR (e.g. "Paste code here…").
+const DEFAULT_COLS = 500;
 const DEFAULT_ROWS = 36;
 
 /**
@@ -84,9 +88,18 @@ export function spawnClaudeInteractive(input: {
   // `exec bash --login` makes bash inherit the PTY so script(1) doesn't
   // double-fork on session close.
   const claudeBin = env.CLAUDE_BIN ?? "claude";
-  const claudeArgs = "--dangerously-skip-permissions";
+  // No --dangerously-skip-permissions in chat sessions: that flag
+  // forces a "Bypass Permissions" accept prompt every spawn (claude
+  // can't remember acceptance across processes). Agent jobs pass it
+  // because they run unattended; chat is interactive so the per-action
+  // approval prompts are fine.
   const claudeModel = env.CLAUDE_MODEL;
-  const initLine = `${claudeBin} ${claudeArgs} --model ${claudeModel}; exec bash --login`;
+  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  // Force HOME inside the inner shell — bash --login reads /etc/profile
+  // and ~/.profile which can reset HOME to /root if the runuser PAM
+  // session set it that way. Re-exporting after profile load guarantees
+  // claude reads its credentials from the state volume.
+  const initLine = `export HOME='${stateHome}'; cd '${input.cwd}'; ${claudeBin} --model ${claudeModel}; export HOME='${stateHome}'; exec bash --login`;
   // Only export ANTHROPIC_API_KEY when it's actually set. Setting it to
   // an empty string overrides whatever ~/.claude/.credentials.json the
   // operator just wrote via the wizard's setup-token flow — claude reads

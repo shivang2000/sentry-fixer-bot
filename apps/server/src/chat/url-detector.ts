@@ -13,6 +13,8 @@ const HINTS = [
   /sign in.*claude/i,
   /first copy.*one-time/i,
   /one-time code/i,
+  /^\s*url:\s*https?:/im, // sentry-cli: "URL:  https://sentry.io/oauth/device/?…"
+  /user_code=/i, // device-code URL anywhere
 ];
 
 const URL_CHAR = /[A-Za-z0-9._~:/?#@!$&'()*+,;=%[\]-]/;
@@ -35,29 +37,19 @@ export function detectOAuthPrompt(buffer: string): { url: string } | null {
   const start = clean.indexOf("https://");
   if (start < 0) return null;
 
-  // PTY hard-wrap continuation rule: real wraps emit a single `\r\n` (CR
-  // then LF) at the column boundary, with URL characters resuming on the
-  // next line. Two cases must end the URL:
-  //   1. Plain text afterwards (bare `\n` line break in a sentence).
-  //   2. A blank line — i.e. two consecutive `\r\n` sequences. Claude's
-  //      setup-token prints the URL, then a blank line, then "Paste code
-  //      here if prompted". Without this guard the detector swallows the
-  //      prompt text into the URL.
+  // Terminate at first newline (CR or LF). We rely on the spawner
+  // setting wide PTY cols (200+) so URLs never hard-wrap. Trying to
+  // reassemble across `\r\n` boundaries reliably is impossible: the
+  // next line might start with another URL_CHAR ("Paste code here…"
+  // starts with P, which is a valid URL char), so we'd glue prose
+  // onto the URL. Better to require the source command to print the
+  // URL on one line and break here cleanly.
   let url = "";
-  let prev = "";
-  let pendingNewlines = 0;
   for (let i = start; i < clean.length; i++) {
     const c = clean[i] as string;
+    if (c === "\r" || c === "\n") break;
     if (URL_CHAR.test(c)) {
       url += c;
-      prev = c;
-      pendingNewlines = 0;
-    } else if (c === "\r") {
-      prev = c;
-    } else if (c === "\n" && prev === "\r") {
-      prev = c;
-      pendingNewlines += 1;
-      if (pendingNewlines >= 2) break;
     } else {
       break;
     }
@@ -70,7 +62,9 @@ export function detectOAuthPrompt(buffer: string): { url: string } | null {
 const DEVICE_CODE_PATTERNS = [
   // gh: "! First copy your one-time code: XXXX-XXXX"
   /one-time code:\s*([A-Z0-9]{3,5}-[A-Z0-9]{3,5})/i,
-  // sentry-cli: "User code: WGQL-WQPC" (also appears in URL query)
+  // sentry CLI (cli.sentry.dev): "  Code:  CFWD-TBXH"
+  /^\s*code:\s*([A-Z0-9]{3,5}-?[A-Z0-9]{3,5})\s*$/im,
+  // sentry-cli legacy + URL query: "user_code=WGQL-WQPC" / "User code: WGQL"
   /user[_ ]code[:=]\s*([A-Z0-9]{3,5}-?[A-Z0-9]{3,5})/i,
 ];
 

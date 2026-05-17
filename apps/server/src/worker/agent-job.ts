@@ -60,6 +60,10 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       stackTrace: run.stackTrace ?? "",
       suspectedFiles: run.suspectedFiles ?? [],
       testCommand: cfg.testCommand,
+      sentryIssueId: alert.sentryIssueId,
+      sentryProject: alert.sentryProject,
+      sentryOrgSlug: process.env.SENTRY_ORG_SLUG,
+      sentryLevel: alert.level,
     });
 
     const { home, mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });

@@ -36,13 +36,16 @@ describe("detectOAuthPrompt", () => {
     expect(out?.url).toBe("https://claude.ai/login");
   });
 
-  it("reassembles a URL hard-wrapped by the PTY at column 80", () => {
+  it("stops at the first CR/LF (no wrap reassembly)", () => {
     const wrapped =
       "Browser didn't open? Use the URL below to sign in\r\n\r\n" +
       "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88\r\n" +
       "ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fexample.com\r\n";
+    // We rely on the spawner setting wide PTY cols (DEFAULT_COLS=500
+    // in pty-runner) so real URLs never wrap. The detector matches
+    // only what's on the same line — anything past `\r` is prose.
     expect(detectOAuthPrompt(wrapped)?.url).toBe(
-      "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fexample.com",
+      "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88",
     );
   });
 

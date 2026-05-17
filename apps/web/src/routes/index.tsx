@@ -26,29 +26,23 @@ export const Route = createFileRoute("/")({
   component: HomeWizard,
 });
 
-function actionLabelFor(stepId: string): string {
-  if (stepId === "mcp") return "Open Doctor";
+function actionLabelFor(_stepId: string): string {
   return "Paste keys";
 }
 
 function shellLabelFor(stepId: string): string {
-  if (stepId === "sentry") return "Paste in shell";
-  if (stepId === "mcp") return "Probe MCPs";
+  if (stepId === "sentry") return "Run sentry login";
   return "Open shell";
 }
 
 // Every step gets an inline-shell path:
-//   claude  → `claude setup-token` (OAuth URL + paste-back code)
+//   claude  → `claude auth login` (OAuth URL + paste-back code)
 //   github  → `gh auth login --web` (device code + browser flow)
-//   sentry  → interactive bun script (token + slug paste + Sentry API
-//             validation + env-file write)
-//   mcp     → `claude mcp list` (read-only probe so operator sees the
-//             same line the wizard parsed)
+//   sentry  → `sentry auth login` via cli.sentry.dev (device code)
 const SHELL_PROVIDERS: Record<string, LoginProvider> = {
   claude: "claude",
   github: "github",
   sentry: "sentry",
-  mcp: "mcp",
 };
 
 function HomeWizard() {
@@ -88,6 +82,15 @@ function HomeWizard() {
       setExpandedShellId(null);
     }
   }, [steps, expandedShellId]);
+
+  // Force a fresh probe whenever a shell collapses. The 3s polling
+  // catches the file write, but pulling immediately on completion
+  // closes the visible "didn't update" gap.
+  useEffect(() => {
+    if (expandedShellId === null) {
+      qc.invalidateQueries({ queryKey: trpc.setup.status.queryKey() });
+    }
+  }, [expandedShellId, qc]);
 
   const refetchStatus = () => qc.invalidateQueries({ queryKey: trpc.setup.status.queryKey() });
 

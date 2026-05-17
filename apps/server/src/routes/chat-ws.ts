@@ -121,11 +121,21 @@ chatWs.get(
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
 
         if (msg.type === "oauth_response" && msg.code) {
-          // \r matches what xterm emits when the user hits Enter. \n
-          // alone gets consumed but doesn't advance some prompts (claude
-          // setup-token in particular), forcing the operator to press
-          // Enter manually a second time.
-          handle.write(`${msg.code}\r`);
+          // Forward exactly what the user pasted, no terminator. Some
+          // CLIs (claude setup-token) reject the input when an extra
+          // \n / \r is appended; let the operator type Enter inside
+          // the xterm if their CLI actually needs a line terminator.
+          const cleaned = msg.code.replace(/[\r\n\s]+$/g, "").replace(/^\s+/, "");
+          log.info(
+            { len: cleaned.length, head: cleaned.slice(0, 6), tail: cleaned.slice(-4) },
+            "login: oauth_response forwarded",
+          );
+          // Real xterm Enter on a PTY sends CR (\r), which the kernel
+          // line discipline converts to \n before the reader sees it.
+          // We're writing into the PTY master, so emit \r exactly like
+          // a keyboard would — the ICRNL termios bit on the slave side
+          // turns it into the \n claude's readline waits for.
+          handle.write(`${cleaned}\r`);
         }
 
         // Live resize not supported by util-linux script(1). Recorded for
@@ -174,13 +184,15 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
   const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
 
   if (provider === "claude") {
-    // `claude setup-token` is the CLI's non-interactive OAuth entry point —
-    // prints "Browser didn't open? Use the URL below" + URL, then waits on
-    // stdin for the pasted auth code. `claude /login` is a TUI slash command
-    // gated behind the first-run theme picker and is not callable headlessly.
+    // `claude auth login` is the CLI's documented user-facing OAuth
+    // entry point. Prints the URL, the user opens it externally,
+    // pastes the returned code back into stdin. Persists creds to
+    // ~/.claude/.credentials.json (we pin HOME so that lands on the
+    // state volume). `claude setup-token` is the older flow and has
+    // proven flaky to drive headlessly.
     return spawnPtyCommand({
       cmd: "claude",
-      args: ["setup-token"],
+      args: ["auth", "login"],
       cwd: process.cwd(),
       env: { HOME: stateHome },
     });
@@ -239,28 +251,37 @@ chatWs.get(
         }
 
         let sentDeviceCode: string | null = null;
+        let sentOauthUrl: string | null = null;
         handle.proc.stdout.on("data", (chunk: Buffer) => {
           const text = chunk.toString("utf8");
           outBuffer += text;
           if (outBuffer.length > 32_000) outBuffer = outBuffer.slice(-16_000);
           ws.send(JSON.stringify({ type: "stdout", data: text }));
           const oauth = detectOAuthPrompt(outBuffer);
-          if (oauth) {
+          if (oauth && oauth.url !== sentOauthUrl) {
+            sentOauthUrl = oauth.url;
             ws.send(JSON.stringify({ type: "oauth_url", url: oauth.url, provider }));
-            // Don't reset outBuffer yet — device code often appears
-            // *after* the URL (gh) or in the URL itself (sentry-cli).
-            // Just remember we surfaced the URL.
+            // Don't reset outBuffer — device code often appears *after*
+            // the URL (gh) or in the URL itself (sentry-cli). Dedup is
+            // handled by the sentOauthUrl guard above; without it the
+            // OAuthCard re-mounts with the same URL on every stdout
+            // chunk, making the operator think the submit looped.
           }
-          const code = detectDeviceCode(outBuffer);
+          // Claude is paste-back; it has no device code. Skip the
+          // detector entirely to avoid false positives matching parts
+          // of the OAuth URL's state parameter.
+          const code = provider === "claude" ? null : detectDeviceCode(outBuffer);
           if (code && code !== sentDeviceCode) {
             sentDeviceCode = code;
             ws.send(JSON.stringify({ type: "device_code", code, provider }));
             // gh + sentry-cli both pause after printing the device code
             // with a "Press Enter to open the URL in your browser…"
-            // prompt. We're headless so the browser never opens; auto-
-            // press Enter so the CLI flips into the polling-for-token
-            // phase. The operator already has the code on the OAuthCard.
-            if (handle) handle.write("\r");
+            // prompt. Auto-press Enter so the CLI flips into polling.
+            // claude is paste-back, NOT device-code, so don't auto-Enter
+            // for it — the operator's Submit on the OAuthCard sends the
+            // code itself; an unrequested Enter just kicks off a
+            // second blank-line prompt that confuses readline.
+            if (handle && provider !== "claude") handle.write("\r");
           }
         });
         handle.proc.stderr.on("data", (chunk: Buffer) => {
@@ -277,11 +298,29 @@ chatWs.get(
         if (msg.type === "stdin") handle.write(msg.data);
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
         if (msg.type === "oauth_response" && msg.code) {
-          // \r matches what xterm emits when the user hits Enter. \n
-          // alone gets consumed but doesn't advance some prompts (claude
-          // setup-token in particular), forcing the operator to press
-          // Enter manually a second time.
-          handle.write(`${msg.code}\r`);
+          // Forward exactly what the user pasted, no terminator. Some
+          // CLIs (claude setup-token) reject the input when an extra
+          // \n / \r is appended; let the operator type Enter inside
+          // the xterm if their CLI actually needs a line terminator.
+          const cleaned = msg.code.replace(/[\r\n\s]+$/g, "").replace(/^\s+/, "");
+          log.info(
+            { len: cleaned.length, head: cleaned.slice(0, 6), tail: cleaned.slice(-4) },
+            "login: oauth_response forwarded",
+          );
+          // Split the write: code first, then \r as a separate chunk
+          // 50ms later. Some readers see one big blob and ignore the
+          // trailing terminator. Splitting mimics a human typing then
+          // hitting Enter. \r goes through PTY ICRNL → \n for the
+          // reader, matching what an xterm Enter keypress would do.
+          handle.write(cleaned);
+          const h = handle;
+          setTimeout(() => {
+            try {
+              h.write("\r");
+            } catch {
+              // proc already exited
+            }
+          }, 50);
         }
       },
 
