@@ -41,6 +41,7 @@ import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
 
 const NAV_PRIMARY = [
+  { to: "/chat", label: "Chat", icon: MessageSquareCode },
   { to: "/", label: "Home", icon: Home },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ] as const;
@@ -51,10 +52,7 @@ const NAV_OPERATE = [
   { to: "/skills", label: "Skills", icon: Sparkles },
 ] as const;
 
-const NAV_OBSERVE = [
-  { to: "/runs", label: "Runs", icon: History },
-  { to: "/chat", label: "Chat", icon: MessageSquareCode },
-] as const;
+const NAV_OBSERVE = [{ to: "/runs", label: "Runs", icon: History }] as const;
 
 const NAV_SYSTEM = [
   { to: "/doctor", label: "Doctor", icon: Stethoscope },

@@ -158,7 +158,9 @@ chatWs.get(
 // stdin. Sessions are not persisted to chat_sessions — these are
 // short-lived auth flows.
 
-function loginSpawn(provider: "claude" | "github"): PtyHandle {
+type LoginProvider = "claude" | "github" | "sentry" | "mcp";
+
+function loginSpawn(provider: LoginProvider): PtyHandle {
   if (provider === "claude") {
     // `claude setup-token` is the CLI's non-interactive OAuth entry point —
     // prints "Browser didn't open? Use the URL below" + URL, then waits on
@@ -170,19 +172,41 @@ function loginSpawn(provider: "claude" | "github"): PtyHandle {
       cwd: process.cwd(),
     });
   }
-  // `gh auth login --web` prints a one-time device code + URL.
+  if (provider === "github") {
+    // `gh auth login --web` prints a one-time device code + URL.
+    return spawnPtyCommand({
+      cmd: "gh",
+      args: ["auth", "login", "--web", "--git-protocol", "https", "--hostname", "github.com"],
+      cwd: process.cwd(),
+    });
+  }
+  if (provider === "mcp") {
+    // Read-only probe — show what claude thinks of every configured MCP
+    // server so the operator can debug a "Missing: …" line on the wizard.
+    return spawnPtyCommand({
+      cmd: "claude",
+      args: ["mcp", "list"],
+      cwd: process.cwd(),
+    });
+  }
+  // sentry — runs the interactive setup script that prompts for token +
+  // org slug, validates against the Sentry API, writes to the env file.
   return spawnPtyCommand({
-    cmd: "gh",
-    args: ["auth", "login", "--web", "--git-protocol", "https", "--hostname", "github.com"],
+    cmd: "bun",
+    args: ["run", `${process.cwd()}/apps/server/src/cli/sentry-setup.ts`],
     cwd: process.cwd(),
   });
 }
+
+const VALID_PROVIDERS = new Set<LoginProvider>(["claude", "github", "sentry", "mcp"]);
 
 chatWs.get(
   "/api/login/:provider",
   upgradeWebSocket((c) => {
     const providerRaw = c.req.param("provider");
-    const provider: "claude" | "github" = providerRaw === "github" ? "github" : "claude";
+    const provider: LoginProvider = VALID_PROVIDERS.has(providerRaw as LoginProvider)
+      ? (providerRaw as LoginProvider)
+      : "claude";
     let handle: PtyHandle | null = null;
     let outBuffer = "";
 
