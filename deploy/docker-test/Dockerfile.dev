@@ -62,6 +62,7 @@ RUN install -d -o sfb-runner -g sfb-runner -m 0700 \
       /sfb/state/home/.cache \
       /sfb/state/work \
       /sfb/state/skills \
+      /sfb/state/dev \
  && install -d -o root -g sfb-runner -m 0770 /sfb/state/etc
 
 WORKDIR /opt/sfb/current

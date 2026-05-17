@@ -1,25 +1,24 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { createDb } from "@sentry-fixer-bot/db";
 import { chatMessages, chatSessions } from "@sentry-fixer-bot/db/schema/admin";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import { type PtyHandle, spawnClaudeInteractive, spawnPtyCommand } from "../chat/pty-runner";
-import { detectOAuthPrompt } from "../chat/url-detector";
+import { detectDeviceCode, detectOAuthPrompt } from "../chat/url-detector";
 import { log } from "../log";
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
 
 export const chatWs = new Hono();
 
-// Per-session work dir on the state volume. Each chat session gets its
-// own subdir so claude / agent transcripts / scratch don't collide. The
-// dir survives container restarts (it's on /sfb/state in container mode
-// or /var/lib/sfb in EC2 mode).
-function workDirFor(sessionId: string): string {
-  const base = process.env.WORK_DIR ?? "/var/lib/sfb/work";
-  return join(base, sessionId);
+// Chat sessions all share a single persistent dev folder on the state
+// volume. Operators clone repos into /sfb/state/dev, run things across
+// sessions, and the work survives session.end / container restart. Per-
+// session isolation belongs to agent runs (which still use WORK_DIR =
+// /sfb/state/work/<runId>) — chat is for humans, not the bot.
+function workDirFor(_sessionId: string): string {
+  return process.env.SFB_CHAT_DIR ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/dev`;
 }
 
 type ClientMsg =
@@ -121,7 +120,13 @@ chatWs.get(
         // Legacy line-buffered protocol kept while we migrate clients.
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
 
-        if (msg.type === "oauth_response" && msg.code) handle.write(`${msg.code}\n`);
+        if (msg.type === "oauth_response" && msg.code) {
+          // \r matches what xterm emits when the user hits Enter. \n
+          // alone gets consumed but doesn't advance some prompts (claude
+          // setup-token in particular), forcing the operator to press
+          // Enter manually a second time.
+          handle.write(`${msg.code}\r`);
+        }
 
         // Live resize not supported by util-linux script(1). Recorded for
         // the next spawn — clients that really need a different size
@@ -163,11 +168,10 @@ type LoginProvider = "claude" | "github" | "sentry" | "mcp";
 function loginSpawn(provider: LoginProvider): PtyHandle {
   // HOME must point at the state volume so every CLI's dotfiles
   // (.claude/, .config/gh/, .sentry/, .sentryclirc) persist across
-  // container recreations. process.env.HOME is already set to
-  // /sfb/state/home via the env file load, but we pin it explicitly on
-  // every spawn so a future env-file edit can't silently break login
-  // persistence.
-  const stateHome = process.env.HOME ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  // container recreations. bun's inherited process.env.HOME is /root
+  // (runuser populates HOME from /etc/passwd in container mode), so we
+  // can't fall back to it — always compute from SFB_STATE_DIR.
+  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
 
   if (provider === "claude") {
     // `claude setup-token` is the CLI's non-interactive OAuth entry point —
@@ -234,6 +238,7 @@ chatWs.get(
           return;
         }
 
+        let sentDeviceCode: string | null = null;
         handle.proc.stdout.on("data", (chunk: Buffer) => {
           const text = chunk.toString("utf8");
           outBuffer += text;
@@ -242,7 +247,20 @@ chatWs.get(
           const oauth = detectOAuthPrompt(outBuffer);
           if (oauth) {
             ws.send(JSON.stringify({ type: "oauth_url", url: oauth.url, provider }));
-            outBuffer = "";
+            // Don't reset outBuffer yet — device code often appears
+            // *after* the URL (gh) or in the URL itself (sentry-cli).
+            // Just remember we surfaced the URL.
+          }
+          const code = detectDeviceCode(outBuffer);
+          if (code && code !== sentDeviceCode) {
+            sentDeviceCode = code;
+            ws.send(JSON.stringify({ type: "device_code", code, provider }));
+            // gh + sentry-cli both pause after printing the device code
+            // with a "Press Enter to open the URL in your browser…"
+            // prompt. We're headless so the browser never opens; auto-
+            // press Enter so the CLI flips into the polling-for-token
+            // phase. The operator already has the code on the OAuthCard.
+            if (handle) handle.write("\r");
           }
         });
         handle.proc.stderr.on("data", (chunk: Buffer) => {
@@ -258,7 +276,13 @@ chatWs.get(
         if (!msg || !handle) return;
         if (msg.type === "stdin") handle.write(msg.data);
         if (msg.type === "user_input" && msg.data) handle.write(`${msg.data}\n`);
-        if (msg.type === "oauth_response" && msg.code) handle.write(`${msg.code}\n`);
+        if (msg.type === "oauth_response" && msg.code) {
+          // \r matches what xterm emits when the user hits Enter. \n
+          // alone gets consumed but doesn't advance some prompts (claude
+          // setup-token in particular), forcing the operator to press
+          // Enter manually a second time.
+          handle.write(`${msg.code}\r`);
+        }
       },
 
       onClose() {

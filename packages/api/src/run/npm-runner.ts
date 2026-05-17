@@ -123,7 +123,7 @@ export async function runCommand(input: {
       ...process.env,
       // Force npm to write into the state-volume cache so installs persist.
       NPM_CONFIG_CACHE: `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home/.npm`,
-      HOME: process.env.HOME ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`,
+      HOME: `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`,
       ...(input.extraEnv ?? {}),
     },
     stdout: "pipe",

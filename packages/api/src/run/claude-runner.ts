@@ -23,9 +23,13 @@ async function claude(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  // Force HOME to the state volume — bun's process.env.HOME is /root
+  // in container mode (runuser sets it from /etc/passwd). The login
+  // flow pins HOME=/sfb/state/home explicitly when writing creds; the
+  // status reader has to use the same path to find them.
   const proc = BunRuntime.spawn(["claude", ...args], {
     cwd: stateHome,
-    env: { ...process.env, HOME: process.env.HOME ?? stateHome },
+    env: { ...process.env, HOME: stateHome },
     stdout: "pipe",
     stderr: "pipe",
   });

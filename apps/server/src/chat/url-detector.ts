@@ -66,3 +66,27 @@ export function detectOAuthPrompt(buffer: string): { url: string } | null {
   url = url.replace(/[.,;:!?]+$/, "");
   return url.length > "https://".length ? { url } : null;
 }
+
+const DEVICE_CODE_PATTERNS = [
+  // gh: "! First copy your one-time code: XXXX-XXXX"
+  /one-time code:\s*([A-Z0-9]{3,5}-[A-Z0-9]{3,5})/i,
+  // sentry-cli: "User code: WGQL-WQPC" (also appears in URL query)
+  /user[_ ]code[:=]\s*([A-Z0-9]{3,5}-?[A-Z0-9]{3,5})/i,
+];
+
+/**
+ * gh + sentry-cli print a short device code next to the OAuth URL. The
+ * code is what the user has to type into the page at the URL. Render it
+ * prominently on the OAuthCard so the operator doesn't have to scroll
+ * through the xterm to find it.
+ *
+ * Returns null if no device-code pattern matches.
+ */
+export function detectDeviceCode(buffer: string): string | null {
+  const clean = buffer.replace(ANSI, "").replace(OSC, "");
+  for (const pat of DEVICE_CODE_PATTERNS) {
+    const m = clean.match(pat);
+    if (m?.[1]) return m[1].toUpperCase();
+  }
+  return null;
+}

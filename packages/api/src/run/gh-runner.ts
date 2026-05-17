@@ -23,9 +23,13 @@ const BunRuntime = (globalThis as unknown as { Bun: BunGlobal }).Bun;
 
 async function gh(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  // Force HOME to the state-volume home. runuser/bash hand the bun
+  // server process.env.HOME=/root in container mode, but `gh auth login`
+  // (spawned via chat-ws.ts) writes its creds under our pinned
+  // /sfb/state/home so reads have to match.
   const proc = BunRuntime.spawn(["gh", ...args], {
     cwd: stateHome,
-    env: { ...process.env, HOME: process.env.HOME ?? stateHome },
+    env: { ...process.env, HOME: stateHome },
     stdout: "pipe",
     stderr: "pipe",
   });

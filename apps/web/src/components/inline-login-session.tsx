@@ -8,6 +8,7 @@ import { XtermPanel, type XtermPanelHandle } from "@/components/xterm-panel";
 type LoginMessage =
   | { type: "stdout"; data: string }
   | { type: "oauth_url"; url: string; provider: string }
+  | { type: "device_code"; code: string; provider: string }
   | { type: "exit"; code: number }
   | { type: "error"; message: string };
 
@@ -50,6 +51,7 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
   const termRef = useRef<XtermPanelHandle>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [deviceCode, setDeviceCode] = useState<string | null>(null);
 
   // Stash callbacks in refs so the WebSocket effect only depends on
   // `provider`. Without this, a parent re-render creates a new
@@ -76,6 +78,12 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
         case "oauth_url":
           setOauthUrl(msg.url);
           break;
+        case "device_code":
+          setDeviceCode(msg.code);
+          // gh / sentry don't expect a stdin paste-back; ensure the card
+          // surfaces even if it was dismissed earlier.
+          setOauthUrl((prev) => prev ?? "");
+          break;
         case "exit":
           termRef.current?.writeln(`\r\n\x1b[33m●\x1b[0m Login flow ended (exit ${msg.code}).`);
           if (msg.code === 0) {
@@ -97,15 +105,18 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
 
   return (
     <div className="space-y-3">
-      {oauthUrl ? (
+      {oauthUrl !== null ? (
         <OAuthCard
           url={oauthUrl}
+          deviceCode={deviceCode}
+          provider={provider}
           onSubmit={(code) => {
             wsRef.current?.send(JSON.stringify({ type: "oauth_response", code }));
             setOauthUrl(null);
           }}
           onCancel={() => {
             setOauthUrl(null);
+            setDeviceCode(null);
             wsRef.current?.close();
             onCancel?.();
           }}

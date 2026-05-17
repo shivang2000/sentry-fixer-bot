@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowRight, Check, ChevronDown, ChevronRight, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { z } from "zod";
 
 import { InlineLoginSession, type LoginProvider } from "@/components/inline-login-session";
@@ -55,8 +56,17 @@ function HomeWizard() {
   const { force } = useSearch({ from: "/" });
   const forced = force !== undefined && force !== false && force !== "" && force !== "0";
   const navigate = useNavigate();
-  const status = useQuery(trpc.setup.status.queryOptions());
   const [expandedShellId, setExpandedShellId] = useState<string | null>(null);
+  // Poll setup.status every 3 seconds while a shell is open. WS exit
+  // messages are the primary signal but a CLI that writes its creds
+  // and then sits in a final "press any key" prompt won't emit exit
+  // until the operator dismisses it — polling catches the underlying
+  // file write so the step pill flips immediately.
+  const status = useQuery({
+    ...trpc.setup.status.queryOptions(),
+    refetchInterval: expandedShellId ? 3_000 : false,
+    refetchOnWindowFocus: true,
+  });
 
   const steps = status.data?.steps ?? [];
   const ready = status.data?.ready ?? false;
@@ -65,6 +75,19 @@ function HomeWizard() {
   useEffect(() => {
     if (ready && !forced) navigate({ to: "/chat" });
   }, [ready, forced, navigate]);
+
+  // When a step the operator is currently shelling for flips done
+  // (via polling OR via the WS exit handler), auto-collapse the shell
+  // and surface a success toast. Without this the operator stares at a
+  // dead terminal and isn't sure the login took.
+  useEffect(() => {
+    if (!expandedShellId) return;
+    const step = steps.find((s) => s.id === expandedShellId);
+    if (step?.done) {
+      toast.success(`${step.label} — done`);
+      setExpandedShellId(null);
+    }
+  }, [steps, expandedShellId]);
 
   const refetchStatus = () => qc.invalidateQueries({ queryKey: trpc.setup.status.queryKey() });
 

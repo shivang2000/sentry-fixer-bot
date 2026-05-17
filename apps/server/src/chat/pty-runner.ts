@@ -87,15 +87,24 @@ export function spawnClaudeInteractive(input: {
   const claudeArgs = "--dangerously-skip-permissions";
   const claudeModel = env.CLAUDE_MODEL;
   const initLine = `${claudeBin} ${claudeArgs} --model ${claudeModel}; exec bash --login`;
+  // Only export ANTHROPIC_API_KEY when it's actually set. Setting it to
+  // an empty string overrides whatever ~/.claude/.credentials.json the
+  // operator just wrote via the wizard's setup-token flow — claude reads
+  // env first, sees an empty key, and falls back to "not logged in".
+  const extraEnv: Record<string, string> = {};
+  if (env.ANTHROPIC_API_KEY) extraEnv.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
+  // Pin HOME to the state volume — bun's process.env.HOME is /root in
+  // container mode (runuser sets it from /etc/passwd before exec'ing the
+  // server). The login flow writes creds under /sfb/state/home; readers
+  // must point at the same path.
+  extraEnv.HOME = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
   const handle = spawnPtyCommand({
     cmd: "/bin/bash",
     args: ["-c", initLine],
     cwd: input.cwd,
     cols: input.cols,
     rows: input.rows,
-    env: {
-      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "",
-    },
+    env: extraEnv,
   });
   if (input.prompt) handle.write(`${input.prompt}\n`);
   return handle;
