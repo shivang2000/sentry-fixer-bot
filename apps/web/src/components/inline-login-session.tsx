@@ -51,6 +51,14 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
   const wsRef = useRef<WebSocket | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
 
+  // Stash callbacks in refs so the WebSocket effect only depends on
+  // `provider`. Without this, a parent re-render creates a new
+  // onComplete reference → useEffect re-fires → WS closes + reopens →
+  // gh / claude / sentry get re-spawned every render → device codes
+  // regenerate in a loop. That's the bug the operator hit on gh.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     const ws = new WebSocket(wsUrlFor(provider));
     wsRef.current = ws;
@@ -72,7 +80,7 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
           termRef.current?.writeln(`\r\n\x1b[33m●\x1b[0m Login flow ended (exit ${msg.code}).`);
           if (msg.code === 0) {
             toast.success(`${provider} login complete`);
-            onComplete?.();
+            onCompleteRef.current?.();
           }
           break;
         case "error":
@@ -85,7 +93,7 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
       ws.close();
       wsRef.current = null;
     };
-  }, [provider, onComplete]);
+  }, [provider]);
 
   return (
     <div className="space-y-3">
@@ -107,6 +115,17 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
         ref={termRef}
         rows={rows}
         initialBanner={`▶ Starting ${provider} login…`}
+        onInput={(data) => {
+          // Forward every xterm keystroke (typed chars, arrows, Ctrl-C,
+          // Enter as \r) straight to the child's stdin. Required for the
+          // sentry-setup interactive script + `gh auth login` device-code
+          // confirmations + any future provider that wants to read raw
+          // stdin. Claude's setup-token also doesn't object — it ignores
+          // bytes outside the OAuth-code paste.
+          const ws = wsRef.current;
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          ws.send(JSON.stringify({ type: "stdin", data }));
+        }}
         className="overflow-hidden rounded-md border border-zinc-800 bg-[#0a0a0a] p-2"
       />
     </div>

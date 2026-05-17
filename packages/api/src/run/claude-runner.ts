@@ -39,14 +39,38 @@ async function claude(
 
 export type ClaudeAuthStatus = { loggedIn: boolean; account?: string; method?: string };
 
+/**
+ * `claude auth status` returns JSON like:
+ *   {"loggedIn": true, "authMethod": "setup-token", "account": "you@x", ...}
+ * or
+ *   {"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}
+ *
+ * JSON.parse is the canonical reader — the older regex approach matched
+ * the human-readable output that claude no longer prints by default and
+ * always returned loggedIn:false for current claude versions.
+ */
 export async function claudeAuthStatus(): Promise<ClaudeAuthStatus> {
   const res = await claude(["auth", "status"]);
-  if (res.exitCode !== 0) return { loggedIn: false };
-  // claude prints "Logged in as <account> via <method>" or similar.
-  const combined = `${res.stdout}\n${res.stderr}`;
-  const acc = combined.match(/(?:logged in as|account)[:\s]+([\w.@+-]+)/i);
-  const method = combined.match(/via\s+([\w-]+)/i);
-  return { loggedIn: true, account: acc?.[1], method: method?.[1] };
+  const text = (res.stdout || res.stderr).trim();
+  if (!text) return { loggedIn: false };
+  try {
+    const parsed = JSON.parse(text) as {
+      loggedIn?: boolean;
+      authMethod?: string;
+      account?: string;
+      email?: string;
+    };
+    if (!parsed.loggedIn) return { loggedIn: false };
+    return {
+      loggedIn: true,
+      account: parsed.account ?? parsed.email,
+      method: parsed.authMethod,
+    };
+  } catch {
+    // Fallback for any non-JSON future format. Exit 0 + non-empty output
+    // with "logged in" anywhere is good enough to flip the pill.
+    return res.exitCode === 0 && /logged in/i.test(text) ? { loggedIn: true } : { loggedIn: false };
+  }
 }
 
 export type McpListEntry = { name: string; ok: boolean; raw: string };

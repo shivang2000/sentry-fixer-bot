@@ -161,6 +161,14 @@ chatWs.get(
 type LoginProvider = "claude" | "github" | "sentry" | "mcp";
 
 function loginSpawn(provider: LoginProvider): PtyHandle {
+  // HOME must point at the state volume so every CLI's dotfiles
+  // (.claude/, .config/gh/, .sentry/, .sentryclirc) persist across
+  // container recreations. process.env.HOME is already set to
+  // /sfb/state/home via the env file load, but we pin it explicitly on
+  // every spawn so a future env-file edit can't silently break login
+  // persistence.
+  const stateHome = process.env.HOME ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+
   if (provider === "claude") {
     // `claude setup-token` is the CLI's non-interactive OAuth entry point —
     // prints "Browser didn't open? Use the URL below" + URL, then waits on
@@ -170,14 +178,18 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
       cmd: "claude",
       args: ["setup-token"],
       cwd: process.cwd(),
+      env: { HOME: stateHome },
     });
   }
   if (provider === "github") {
-    // `gh auth login --web` prints a one-time device code + URL.
+    // `gh auth login --web` prints a one-time device code + URL. The
+    // --git-protocol arg pre-answers gh's "Choose default git protocol"
+    // prompt so the user only has to hit Enter on the device-code page.
     return spawnPtyCommand({
       cmd: "gh",
       args: ["auth", "login", "--web", "--git-protocol", "https", "--hostname", "github.com"],
       cwd: process.cwd(),
+      env: { HOME: stateHome },
     });
   }
   if (provider === "mcp") {
@@ -189,11 +201,12 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
       cwd: process.cwd(),
     });
   }
-  // sentry — runs the interactive setup script that prompts for token +
-  // org slug, validates against the Sentry API, writes to the env file.
+  // sentry — installs sentry-cli onto the state volume (if missing),
+  // runs `sentry-cli login` for the official OAuth flow, then hands off
+  // to a bun shim that writes the token + org slug into the env file.
   return spawnPtyCommand({
-    cmd: "bun",
-    args: ["run", `${process.cwd()}/apps/server/src/cli/sentry-setup.ts`],
+    cmd: "bash",
+    args: [`${process.cwd()}/apps/server/src/cli/sentry-setup.sh`],
     cwd: process.cwd(),
   });
 }
