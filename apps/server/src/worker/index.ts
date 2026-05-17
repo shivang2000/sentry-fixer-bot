@@ -33,14 +33,35 @@ async function ensureDefaultSchedule(name: string, cron: string, data: object = 
 async function main(): Promise<void> {
   const boss = await getBoss();
 
-  await boss.work<TriageJob>(JOB_TRIAGE, async (jobs) => {
+  // expireInSeconds: long-lived handlers. claude triage takes 20-60s,
+  // agent runs take 5-15 min. Default 30s lock expires mid-execution
+  // and pg-boss reschedules — operator sees "triage picked up" twice.
+  // pg-boss v12's types don't cleanly expose the options overload, so
+  // cast where needed.
+  await (
+    boss as unknown as {
+      work<T>(
+        name: string,
+        options: object,
+        handler: (jobs: Array<{ id: string; data: T }>) => Promise<void>,
+      ): Promise<string>;
+    }
+  ).work<TriageJob>(JOB_TRIAGE, { expireInSeconds: 5 * 60 }, async (jobs) => {
     for (const job of jobs) {
       log.info({ id: job.id, payload: job.data }, "triage job picked up");
       await processTriageJob(job.data);
     }
   });
 
-  await boss.work<AgentJob>(JOB_AGENT, async (jobs) => {
+  await (
+    boss as unknown as {
+      work<T>(
+        name: string,
+        options: object,
+        handler: (jobs: Array<{ id: string; data: T }>) => Promise<void>,
+      ): Promise<string>;
+    }
+  ).work<AgentJob>(JOB_AGENT, { expireInSeconds: 30 * 60 }, async (jobs) => {
     for (const job of jobs) {
       log.info({ id: job.id, payload: job.data }, "agent job picked up");
       await processAgentJob(job.data);

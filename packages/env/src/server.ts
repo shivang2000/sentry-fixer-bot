@@ -37,7 +37,7 @@ export const env = createEnv({
     // --- Agent runtime ---
     WORK_DIR: z.string().min(1).default("/var/lib/sfb/work"),
     CLAUDE_BIN: z.string().min(1).default("claude"),
-    CLAUDE_MODEL: z.string().min(1).default("claude-opus-4-7"),
+    CLAUDE_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
     AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(900),
 
     // --- Optional bootstrap admin (skip first-signup-becomes-admin race) ---

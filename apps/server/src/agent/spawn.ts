@@ -18,9 +18,19 @@ export async function spawnClaudeAgent(input: {
   mcpConfigPath?: string;
   timeoutSeconds?: number;
 }): Promise<SpawnResult> {
-  const args = ["--print", "--dangerously-skip-permissions", "--model", env.CLAUDE_MODEL];
+  const args = [
+    "--print",
+    "--dangerously-skip-permissions",
+    "--model",
+    env.CLAUDE_MODEL,
+    "--effort",
+    "high",
+  ];
   if (input.mcpConfigPath) {
-    args.push("--mcp-config", input.mcpConfigPath);
+    // `--mcp-config=<path>` form, not space-separated. claude's
+    // arg parser eats the next positional with the space form which
+    // means the prompt itself is misread as the config path.
+    args.push(`--mcp-config=${input.mcpConfigPath}`);
   }
   args.push(input.prompt);
 
@@ -29,8 +39,14 @@ export async function spawnClaudeAgent(input: {
     cwd: input.cwd,
     env: {
       ...process.env,
-      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ?? "",
-      ...(input.home ? { HOME: input.home } : {}),
+      // Only forward ANTHROPIC_API_KEY when set. Forwarding "" wins
+      // over claude's own ~/.claude/.credentials.json — operator runs
+      // `claude auth login`, key file is fine, but the agent saw an
+      // empty env var and treated itself as unauthenticated.
+      ...(env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY } : {}),
+      // Pin HOME to the state volume so the session creds resolve.
+      // input.home wins if provided (per-run isolated home).
+      HOME: input.home ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`,
     },
     stdout: "pipe",
     stderr: "pipe",

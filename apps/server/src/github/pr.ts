@@ -1,4 +1,4 @@
-import { getInstallationToken } from "./app-auth";
+import { resolveGithubToken } from "./auth";
 
 export type OpenPrInput = {
   cwd: string;
@@ -18,7 +18,7 @@ export type OpenPrResult = { number: number; url: string };
  * installation token (no `gh auth login` on the host).
  */
 export async function openPr(input: OpenPrInput): Promise<OpenPrResult> {
-  const token = await getInstallationToken();
+  const token = await resolveGithubToken();
 
   // Stage + commit any uncommitted changes the agent made
   await runStrict(input.cwd, ["git", "add", "-A"]);

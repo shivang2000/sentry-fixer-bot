@@ -51,12 +51,29 @@ Your job:
 2. Make the minimal code change that fixes the issue.
 3. Add a test that fails before the fix and passes after.
 4. Run \`${input.testCommand}\` and ensure it passes.
-5. When done, write a short summary in <summary>...</summary> tags
-   including:
-   - "confidence": low | medium | high
-   - "risk": low | medium | high
-   - "severity": low | medium | high | critical
-   - what you changed and why.
+5. When done, emit a structured summary in this EXACT shape so the PR
+   description renders cleanly. Every tag is required — leave the body
+   empty if a section truly does not apply:
+
+<summary>
+<problem>
+One paragraph: what the exception is, where it fires, what user
+behavior triggers it. Quote the failing line if useful.
+</problem>
+<hypotheses>
+- H1: <hypothesis> — rejected because <evidence>
+- H2: <hypothesis> — rejected because <evidence>
+- H3: <hypothesis> — CHOSEN because <evidence>
+At least two entries; mark exactly one as CHOSEN.
+</hypotheses>
+<fix>
+What you actually changed and why this addresses the chosen
+hypothesis. List the files touched.
+</fix>
+<confidence>low | medium | high</confidence>
+<risk>low | medium | high</risk>
+<severity>low | medium | high | critical</severity>
+</summary>
 
 Constraints:
 - Touch only files relevant to this fix.

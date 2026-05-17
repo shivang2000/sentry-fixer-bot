@@ -96,3 +96,26 @@ export const budgets = pgTable(
   },
   (t) => [primaryKey({ columns: [t.repo, t.date] })],
 );
+
+// Per-run log lines streamed from the triage + agent workers. Used by
+// /runs/<id> to show a live tail of what claude is doing. Keep it
+// append-only — no updates, just inserts indexed by (run_id, seq) so
+// the UI can poll with `WHERE seq > <lastSeen>` for cheap deltas.
+export const runLogs = pgTable(
+  "run_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    level: text("level").notNull(),
+    source: text("source").notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("run_logs_run_seq_idx").on(t.runId, t.seq),
+    unique("run_logs_run_seq_unique").on(t.runId, t.seq),
+  ],
+);

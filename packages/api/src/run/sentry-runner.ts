@@ -53,6 +53,45 @@ export type SentryAuthStatus = {
 };
 
 /**
+ * Return a usable Sentry API token from any of three sources, in
+ * order of preference:
+ *  1. SENTRY_API_TOKEN in the process env (pasted via /settings).
+ *  2. `sentry auth token` from cli.sentry.dev (after `sentry auth login`).
+ *  3. ~/.sentryclirc legacy token (older sentry-cli).
+ *
+ * Returns null if no token is available. Callers should respond with
+ * a clear "configure Sentry" error rather than 500.
+ */
+export async function getSentryToken(): Promise<string | null> {
+  if (process.env.SENTRY_API_TOKEN) return process.env.SENTRY_API_TOKEN;
+  try {
+    const res = await sentry(["auth", "token"]);
+    if (res.exitCode === 0) {
+      const tok = res.stdout.trim();
+      if (tok && tok.length > 10) return tok;
+    }
+  } catch {
+    // CLI not installed
+  }
+  return null;
+}
+
+export async function getSentryOrgSlug(): Promise<string | null> {
+  if (process.env.SENTRY_ORG_SLUG) return process.env.SENTRY_ORG_SLUG;
+  try {
+    const res = await sentry(["org", "list", "--json"]);
+    if (res.exitCode !== 0) return null;
+    const parsed = JSON.parse(res.stdout) as
+      | Array<{ slug?: string }>
+      | { orgs?: Array<{ slug?: string }> };
+    const list = Array.isArray(parsed) ? parsed : (parsed.orgs ?? []);
+    return list[0]?.slug ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * `sentry auth status` returns a JSON blob with user + org when
  * authenticated. Exit code 0 + non-empty output ⇒ logged in.
  *

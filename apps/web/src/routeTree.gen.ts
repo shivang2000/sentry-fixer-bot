@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as RunsRouteImport } from './routes/runs'
 import { Route as ReposRouteImport } from './routes/repos'
 import { Route as McpsRouteImport } from './routes/mcps'
 import { Route as LoginRouteImport } from './routes/login'
@@ -19,6 +18,8 @@ import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RunsIndexRouteImport } from './routes/runs.index'
+import { Route as RunsIdRouteImport } from './routes/runs.$id'
 import { Route as ReposIdRouteImport } from './routes/repos.$id'
 
 const SkillsRoute = SkillsRouteImport.update({
@@ -29,11 +30,6 @@ const SkillsRoute = SkillsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RunsRoute = RunsRouteImport.update({
-  id: '/runs',
-  path: '/runs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReposRoute = ReposRouteImport.update({
@@ -71,6 +67,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RunsIndexRoute = RunsIndexRouteImport.update({
+  id: '/runs/',
+  path: '/runs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RunsIdRoute = RunsIdRouteImport.update({
+  id: '/runs/$id',
+  path: '/runs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReposIdRoute = ReposIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -85,10 +91,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
-  '/runs': typeof RunsRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs/': typeof RunsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -98,10 +105,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
-  '/runs': typeof RunsRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs': typeof RunsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -112,10 +120,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/mcps': typeof McpsRoute
   '/repos': typeof ReposRouteWithChildren
-  '/runs': typeof RunsRoute
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
   '/repos/$id': typeof ReposIdRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs/': typeof RunsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -127,10 +136,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/mcps'
     | '/repos'
-    | '/runs'
     | '/settings'
     | '/skills'
     | '/repos/$id'
+    | '/runs/$id'
+    | '/runs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -140,10 +150,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/mcps'
     | '/repos'
-    | '/runs'
     | '/settings'
     | '/skills'
     | '/repos/$id'
+    | '/runs/$id'
+    | '/runs'
   id:
     | '__root__'
     | '/'
@@ -153,10 +164,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/mcps'
     | '/repos'
-    | '/runs'
     | '/settings'
     | '/skills'
     | '/repos/$id'
+    | '/runs/$id'
+    | '/runs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -167,9 +179,10 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   McpsRoute: typeof McpsRoute
   ReposRoute: typeof ReposRouteWithChildren
-  RunsRoute: typeof RunsRoute
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
+  RunsIdRoute: typeof RunsIdRoute
+  RunsIndexRoute: typeof RunsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -186,13 +199,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/runs': {
-      id: '/runs'
-      path: '/runs'
-      fullPath: '/runs'
-      preLoaderRoute: typeof RunsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/repos': {
@@ -244,6 +250,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/runs/': {
+      id: '/runs/'
+      path: '/runs'
+      fullPath: '/runs/'
+      preLoaderRoute: typeof RunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs/$id': {
+      id: '/runs/$id'
+      path: '/runs/$id'
+      fullPath: '/runs/$id'
+      preLoaderRoute: typeof RunsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/repos/$id': {
       id: '/repos/$id'
       path: '/$id'
@@ -272,9 +292,10 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   McpsRoute: McpsRoute,
   ReposRoute: ReposRouteWithChildren,
-  RunsRoute: RunsRoute,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
+  RunsIdRoute: RunsIdRoute,
+  RunsIndexRoute: RunsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

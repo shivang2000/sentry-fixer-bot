@@ -1,7 +1,7 @@
-import { mkdir, rm } from "node:fs/promises";
+import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { env } from "@sentry-fixer-bot/env/server";
-import { getInstallationToken } from "../github/app-auth";
+import { resolveGithubToken } from "../github/auth";
 
 export type Workspace = {
   dir: string;
@@ -9,50 +9,94 @@ export type Workspace = {
   cleanup: () => Promise<void>;
 };
 
-/**
- * Create a per-run isolated git workspace.
- * - Clones <repo> at <baseBranch> into /<WORK_DIR>/<runId>/
- * - Creates a new branch sfb/<runId>
- * Caller must call cleanup() in a finally block.
- */
-export async function createWorkspace(input: {
-  runId: string;
-  repo: string; // "owner/name"
-  baseBranch: string;
-}): Promise<Workspace> {
-  const dir = join(env.WORK_DIR, input.runId);
-  await mkdir(dir, { recursive: true });
+function cacheDirFor(repo: string): string {
+  // /sfb/state/repos/<owner>__<name>.git — bare-ish working clone,
+  // reused across runs. Per-run worktree branches off this.
+  const base = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/repos`;
+  return join(base, repo.replace("/", "__"));
+}
 
-  const token = await getInstallationToken();
-  const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
-  const branch = `sfb/${input.runId}`;
-
-  const clone = Bun.spawn(
-    ["git", "clone", "--depth", "1", "--branch", input.baseBranch, cloneUrl, dir],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  if ((await clone.exited) !== 0) {
-    const err = await new Response(clone.stderr).text();
-    throw new Error(`git clone failed: ${err}`);
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  const checkout = Bun.spawn(["git", "checkout", "-b", branch], {
-    cwd: dir,
+async function spawn(
+  argv: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {},
+): Promise<{ exit: number; stderr: string }> {
+  const proc = Bun.spawn(argv, {
+    cwd: opts.cwd,
+    env: { ...process.env, ...(opts.env ?? {}) },
     stdout: "pipe",
     stderr: "pipe",
   });
-  if ((await checkout.exited) !== 0) {
-    const err = await new Response(checkout.stderr).text();
-    throw new Error(`git checkout failed: ${err}`);
+  const stderr = await new Response(proc.stderr).text();
+  const exit = await proc.exited;
+  return { exit, stderr };
+}
+
+/**
+ * Create a per-run isolated workspace using a cached repo clone +
+ * `git worktree`. First run for a repo clones to /sfb/state/repos/
+ * <owner>__<name>; later runs `git fetch` + `worktree add` for a fresh
+ * branch off the just-fetched base. The cache survives container
+ * restarts.
+ *
+ * cleanup() removes the worktree but leaves the cached clone intact.
+ */
+export async function createWorkspace(input: {
+  runId: string;
+  repo: string;
+  baseBranch: string;
+}): Promise<Workspace> {
+  const token = await resolveGithubToken();
+  const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
+  const cache = cacheDirFor(input.repo);
+  const branch = `sfb/${input.runId}`;
+  const dir = join(env.WORK_DIR, input.runId);
+
+  // First-time clone.
+  if (!(await exists(cache))) {
+    await mkdir(cache, { recursive: true });
+    const res = await spawn(["git", "clone", "--filter=blob:none", cloneUrl, cache]);
+    if (res.exit !== 0) {
+      throw new Error(`git clone failed: ${res.stderr}`);
+    }
+  } else {
+    // Fetch updates on subsequent runs. Update remote URL so token
+    // rotates (gh tokens expire ~8h; cached URL would 401 next clone).
+    await spawn(["git", "remote", "set-url", "origin", cloneUrl], { cwd: cache });
+    const res = await spawn(["git", "fetch", "--prune", "origin"], { cwd: cache });
+    if (res.exit !== 0) {
+      throw new Error(`git fetch failed: ${res.stderr}`);
+    }
+  }
+
+  // Create a worktree at WORK_DIR/<runId> branching off the freshly
+  // fetched origin/<baseBranch>. `-B` resets the branch if it
+  // somehow exists already.
+  await mkdir(env.WORK_DIR, { recursive: true });
+  const wt = await spawn(
+    ["git", "worktree", "add", "-B", branch, dir, `origin/${input.baseBranch}`],
+    { cwd: cache },
+  );
+  if (wt.exit !== 0) {
+    throw new Error(`git worktree add failed: ${wt.stderr}`);
   }
 
   return {
     dir,
     branch,
     cleanup: async () => {
+      // Remove worktree (keeps branch ref) then rm the dir. Branch
+      // ref lingers in cache; harmless and lets us re-attach if the
+      // operator wants to inspect later.
+      await spawn(["git", "worktree", "remove", "--force", dir], { cwd: cache });
       await rm(dir, { recursive: true, force: true });
     },
   };

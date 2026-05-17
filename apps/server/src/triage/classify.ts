@@ -1,35 +1,50 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { env } from "@sentry-fixer-bot/env/server";
 import { parseTriageJson, type TriageResult } from "./parse-triage";
 
 export type { TriageResult };
 export { parseTriageJson };
 
-const TRIAGE_MODEL = "claude-haiku-4-5-20251001";
-
-let cached: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (cached) return cached;
-  if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
-  cached = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-  return cached;
-}
-
 const SYSTEM_PROMPT = `You triage production exception alerts. For each alert you receive, classify severity (low | medium | high | critical) and identify suspected file paths from the stack trace. Respond as JSON only: {"severity":"...","summary":"...","suspectedFiles":["path/to/file.ts"]}.`;
 
-/** Haiku classification of an alert + stack trace. */
+/**
+ * Triage via the headless `claude` CLI. We prefer this over the
+ * Anthropic SDK so the bot inherits whatever auth the operator
+ * configured via `claude auth login` (no separate ANTHROPIC_API_KEY
+ * required when on a subscription). HOME is pinned to the state
+ * volume so `~/.claude/.credentials.json` resolves correctly.
+ *
+ * Falls back to ANTHROPIC_API_KEY env when set, in case the operator
+ * pasted it instead of running auth login.
+ */
 export async function classify(input: {
   title: string;
   stackTrace: string;
 }): Promise<TriageResult> {
-  const res = await anthropic().messages.create({
-    model: TRIAGE_MODEL,
-    max_tokens: 512,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `TITLE:\n${input.title}\n\nSTACK:\n${input.stackTrace}` }],
-  });
+  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const prompt = `${SYSTEM_PROMPT}\n\nTITLE:\n${input.title}\n\nSTACK:\n${input.stackTrace}`;
 
-  const block = res.content.find((b) => b.type === "text");
-  const text = block?.type === "text" ? block.text : "{}";
-  return parseTriageJson(text);
+  const proc = Bun.spawn(
+    [
+      env.CLAUDE_BIN,
+      "--print",
+      "--dangerously-skip-permissions",
+      "--model",
+      env.CLAUDE_MODEL,
+      prompt,
+    ],
+    {
+      env: {
+        ...process.env,
+        HOME: stateHome,
+        ...(env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY } : {}),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [out, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  if (exitCode !== 0) {
+    throw new Error(`claude triage exit ${exitCode}`);
+  }
+  return parseTriageJson(out);
 }

@@ -9,14 +9,14 @@ import {
 import { Input } from "@sentry-fixer-bot/ui/components/input";
 import { Label } from "@sentry-fixer-bot/ui/components/label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Play, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { trpc } from "@/utils/trpc";
 
-export const Route = createFileRoute("/runs")({
+export const Route = createFileRoute("/runs/")({
   component: RunsPage,
 });
 
@@ -98,26 +98,46 @@ function RunsPage() {
           </thead>
           <tbody>
             {rows.map(({ run, alert, pr }) => (
-              <tr key={run.id} className="border-t align-top">
+              <tr key={run.id} className="cursor-pointer border-t align-top hover:bg-zinc-900/40">
                 <td className="whitespace-nowrap py-2">
-                  {new Date(run.startedAt).toLocaleString()}
+                  <Link to="/runs/$id" params={{ id: run.id }} className="block">
+                    {new Date(run.startedAt).toLocaleString()}
+                  </Link>
                 </td>
-                <td className="font-mono">{run.status}</td>
-                <td>{run.severity ?? "—"}</td>
-                <td className="max-w-md truncate">{alert.title}</td>
+                <td className="font-mono">
+                  <Link to="/runs/$id" params={{ id: run.id }} className="block">
+                    {run.status}
+                  </Link>
+                </td>
                 <td>
+                  <Link to="/runs/$id" params={{ id: run.id }} className="block">
+                    {run.severity ?? "—"}
+                  </Link>
+                </td>
+                <td className="max-w-md truncate">
+                  <Link to="/runs/$id" params={{ id: run.id }} className="block">
+                    {alert.title}
+                  </Link>
+                </td>
+                <td className="space-x-3 whitespace-nowrap">
                   {pr ? (
                     <a
-                      className="text-blue-600 underline"
+                      className="text-blue-400 underline"
                       href={pr.url}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      #{pr.number} {pr.isDraft ? "(draft)" : ""}
+                      PR #{pr.number}
+                      {pr.isDraft ? " (draft)" : ""}
                     </a>
-                  ) : (
-                    "—"
-                  )}
+                  ) : null}
+                  <Link
+                    to="/runs/$id"
+                    params={{ id: run.id }}
+                    className="text-zinc-400 underline hover:text-zinc-200"
+                  >
+                    Logs
+                  </Link>
                 </td>
               </tr>
             ))}

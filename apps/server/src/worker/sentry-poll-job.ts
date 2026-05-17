@@ -1,6 +1,6 @@
+import { getSentryOrgSlug, getSentryToken } from "@sentry-fixer-bot/api/run/sentry-runner";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { env } from "@sentry-fixer-bot/env/server";
 import { eq } from "drizzle-orm";
 import { upsertAlert } from "../alerts/persist";
 import { log } from "../log";
@@ -20,14 +20,16 @@ type SentryIssue = {
 };
 
 async function fetchRecentIssues(project: string, lookbackMinutes: number): Promise<SentryIssue[]> {
-  if (!env.SENTRY_API_TOKEN || !env.SENTRY_ORG_SLUG) return [];
-  const url = new URL(`${SENTRY_BASE}/projects/${env.SENTRY_ORG_SLUG}/${project}/issues/`);
+  const token = await getSentryToken();
+  const org = await getSentryOrgSlug();
+  if (!token || !org) return [];
+  const url = new URL(`${SENTRY_BASE}/projects/${org}/${project}/issues/`);
   url.searchParams.set("statsPeriod", `${lookbackMinutes}m`);
   url.searchParams.set("limit", "100");
   url.searchParams.set("query", "is:unresolved");
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${env.SENTRY_API_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/json",
     },
     signal: AbortSignal.timeout(15_000),
@@ -48,8 +50,10 @@ async function fetchRecentIssues(project: string, lookbackMinutes: number): Prom
  * Fallback is 15 for legacy / runNow callers.
  */
 export async function processSentryPollJob(data: { lookbackMinutes?: number } = {}): Promise<void> {
-  if (!env.SENTRY_API_TOKEN || !env.SENTRY_ORG_SLUG) {
-    log.warn("[sentry-poll] SENTRY_API_TOKEN/SENTRY_ORG_SLUG not set; skipping");
+  const token = await getSentryToken();
+  const org = await getSentryOrgSlug();
+  if (!token || !org) {
+    log.warn("[sentry-poll] no sentry token/org (run `sentry auth login` or set SENTRY_*)");
     return;
   }
   const lookbackMinutes = data.lookbackMinutes ?? 15;

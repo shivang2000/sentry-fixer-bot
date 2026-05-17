@@ -1,7 +1,7 @@
 import { createDb } from "@sentry-fixer-bot/db";
-import { alerts, prs, runs } from "@sentry-fixer-bot/db/schema/domain";
+import { alerts, prs, runLogs, runs } from "@sentry-fixer-bot/db/schema/domain";
 import { TRPCError } from "@trpc/server";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
 import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../index";
@@ -27,15 +27,17 @@ type SentryIssueDetail = {
 };
 
 async function fetchSentryIssue(issueId: string): Promise<SentryIssueDetail> {
-  const { env } = await import("@sentry-fixer-bot/env/server");
-  if (!env.SENTRY_API_TOKEN) {
+  const { getSentryToken } = await import("../run/sentry-runner");
+  const token = await getSentryToken();
+  if (!token) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: "SENTRY_API_TOKEN not configured — paste in /settings or run sentry auth login.",
+      message:
+        "Sentry not configured — run `sentry auth login` from the wizard or paste SENTRY_API_TOKEN in /settings.",
     });
   }
   const res = await fetch(`https://sentry.io/api/0/issues/${issueId}/`, {
-    headers: { Authorization: `Bearer ${env.SENTRY_API_TOKEN}`, Accept: "application/json" },
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
@@ -74,9 +76,31 @@ export const runsRouter = router({
 
   get: protectedProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
     const db = createDb();
-    const rows = await db.select().from(runs).where(eq(runs.id, input.id)).limit(1);
-    return rows[0];
+    const rows = await db
+      .select({ run: runs, alert: alerts, pr: prs })
+      .from(runs)
+      .innerJoin(alerts, eq(alerts.id, runs.alertId))
+      .leftJoin(prs, eq(prs.runId, runs.id))
+      .where(eq(runs.id, input.id))
+      .limit(1);
+    return rows[0] ?? null;
   }),
+
+  // Live log tail. UI polls every 2s passing the last `seq` it has.
+  // Server returns rows with `seq > lastSeq` ordered ascending. 500
+  // per fetch is enough for human-readable bursts; throttle the writer
+  // upstream if you need bigger.
+  logs: protectedProcedure
+    .input(z.object({ runId: z.string().uuid(), afterSeq: z.number().int().min(0).default(0) }))
+    .query(async ({ input }) => {
+      const db = createDb();
+      return db
+        .select()
+        .from(runLogs)
+        .where(and(eq(runLogs.runId, input.runId), gt(runLogs.seq, input.afterSeq)))
+        .orderBy(asc(runLogs.seq))
+        .limit(500);
+    }),
 
   /**
    * Synthesizes a webhook-style alert from a Sentry issue id (or full

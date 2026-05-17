@@ -16,6 +16,7 @@ import { runRepoTests } from "../gate/run-tests";
 import { openPr } from "../github/pr";
 import { log } from "../log";
 import type { AgentJob } from "../queue/jobs";
+import { appendRunLog } from "../runs/log";
 import { findRunById, updateRun } from "../runs/persist";
 import { postIssueComment } from "../sentry/comment";
 
@@ -48,10 +49,22 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
     return;
   }
 
+  await appendRunLog({
+    runId: payload.runId,
+    level: "info",
+    source: "agent",
+    message: `Cloning ${payload.repo}@${cfg.defaultBranch} into work dir…`,
+  });
   const ws = await createWorkspace({
     runId: payload.runId,
     repo: payload.repo,
     baseBranch: cfg.defaultBranch,
+  });
+  await appendRunLog({
+    runId: payload.runId,
+    level: "info",
+    source: "agent",
+    message: `Workspace ready: ${ws.dir} (branch ${ws.branch})`,
   });
 
   try {
@@ -66,8 +79,41 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       sentryLevel: alert.level,
     });
 
-    const { home, mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });
-    const agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt, home, mcpConfigPath });
+    const { mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "agent",
+      message: `Spawning claude (model=sonnet, effort=high) in ${ws.dir}…`,
+    });
+    // Intentionally no `home` override — claude reads creds from
+    // /sfb/state/home/.claude/.credentials.json (set by `claude auth
+    // login` in the wizard). Per-run claude-home directory is empty;
+    // pointing HOME there guarantees an exit-1 "not authenticated".
+    // MCP config still flows via --mcp-config to the absolute path.
+    const agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt, mcpConfigPath });
+    await appendRunLog({
+      runId: payload.runId,
+      level: agentRes.exitCode === 0 ? "info" : "error",
+      source: "agent",
+      message: `claude exit ${agentRes.exitCode} in ${(agentRes.durationMs / 1000).toFixed(1)}s`,
+    });
+    if (agentRes.stdout) {
+      await appendRunLog({
+        runId: payload.runId,
+        level: "debug",
+        source: "agent",
+        message: agentRes.stdout.slice(-4000),
+      });
+    }
+    if (agentRes.stderr) {
+      await appendRunLog({
+        runId: payload.runId,
+        level: agentRes.exitCode === 0 ? "debug" : "error",
+        source: "claude-stderr",
+        message: agentRes.stderr.slice(-4000),
+      });
+    }
     const outcome = parseAgentOutput(agentRes.stdout);
 
     // Secret scan of the diff
@@ -85,8 +131,29 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       testPassed: testRes.passed,
     });
 
+    // claude bailed mid-flight (auth, transient API, hit token cap).
+    // The workspace may still have a partial diff that's worse than no
+    // PR — skip and record no_change. Operator sees the agent log line
+    // with exit code and can re-trigger.
+    if (agentRes.exitCode !== 0) {
+      await appendRunLog({
+        runId: payload.runId,
+        level: "error",
+        source: "agent",
+        message: "claude exited non-zero; skipping PR open.",
+      });
+      await updateRun(payload.runId, { status: "agent_error", endedAt: new Date() });
+      return;
+    }
+
     // If agent didn't produce any change, no PR
     if (!(await hasChanges(ws.dir))) {
+      await appendRunLog({
+        runId: payload.runId,
+        level: "warn",
+        source: "agent",
+        message: "claude produced no diff. Skipping PR. Summary recorded as triage-only.",
+      });
       await updateRun(payload.runId, { status: "no_change", endedAt: new Date() });
       await postIssueComment(
         alert.sentryIssueId,
@@ -98,9 +165,13 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
     const title = `sfb: ${alert.title.slice(0, 100)}`;
     const body = renderPrBody({
       alert: alert.title,
+      problem: outcome.problem,
+      hypotheses: outcome.hypotheses,
+      fix: outcome.fix,
       summary: outcome.summary,
       confidence: outcome.confidence,
       risk: outcome.risk,
+      severity: outcome.severity,
       testPassed: testRes.passed,
       findings,
     });
@@ -126,6 +197,12 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       needsHuman,
     });
 
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "agent",
+      message: `PR opened: ${pr.url}${isDraft ? " (draft)" : ""}`,
+    });
     await postIssueComment(alert.sentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
     await updateRun(payload.runId, {
       status: testRes.passed ? "pr_opened" : "pr_opened_needs_human",
@@ -141,10 +218,12 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       capCostCents: cfg.dailyCostCapCents,
     });
   } catch (err) {
-    log.error({ err: err instanceof Error ? err.message : err }, "agent job failed");
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error({ err: msg }, "agent job failed");
+    await appendRunLog({ runId: payload.runId, level: "error", source: "agent", message: msg });
     await updateRun(payload.runId, {
       status: "error",
-      error: err instanceof Error ? err.message : String(err),
+      error: msg,
       endedAt: new Date(),
     });
   } finally {
@@ -182,9 +261,13 @@ async function scanWorkspace(dir: string): Promise<SecretFinding[]> {
 
 function renderPrBody(input: {
   alert: string;
+  problem: string;
+  hypotheses: string;
+  fix: string;
   summary: string;
   confidence: string;
   risk: string;
+  severity: string;
   testPassed: boolean;
   findings: SecretFinding[];
 }): string {
@@ -195,6 +278,7 @@ function renderPrBody(input: {
   lines.push("");
   lines.push(`- Confidence: \`${input.confidence}\``);
   lines.push(`- Risk: \`${input.risk}\``);
+  lines.push(`- Severity: \`${input.severity}\``);
   lines.push(`- Tests: ${input.testPassed ? "✅ pass" : "❌ fail (draft)"}`);
   if (input.findings.length > 0) {
     lines.push(`- ⚠️ Secret-scan findings: ${input.findings.length}`);
@@ -206,8 +290,34 @@ function renderPrBody(input: {
   lines.push("");
   lines.push("---");
   lines.push("");
-  lines.push("**Agent summary:**");
-  lines.push("");
-  lines.push(input.summary);
+
+  // Structured sections when the agent emitted them. Falls back to the
+  // raw summary blob when the envelope was malformed so we never lose
+  // the agent's output entirely.
+  const hasStructured = input.problem || input.hypotheses || input.fix;
+  if (hasStructured) {
+    if (input.problem) {
+      lines.push("## Problem");
+      lines.push("");
+      lines.push(input.problem);
+      lines.push("");
+    }
+    if (input.hypotheses) {
+      lines.push("## Alternatives considered");
+      lines.push("");
+      lines.push(input.hypotheses);
+      lines.push("");
+    }
+    if (input.fix) {
+      lines.push("## Fix");
+      lines.push("");
+      lines.push(input.fix);
+      lines.push("");
+    }
+  } else {
+    lines.push("**Agent summary:**");
+    lines.push("");
+    lines.push(input.summary);
+  }
   return lines.join("\n");
 }

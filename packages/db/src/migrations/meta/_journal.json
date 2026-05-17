@@ -29,6 +29,13 @@
       "when": 1778974383863,
       "tag": "0003_typical_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779039358794,
+      "tag": "0004_previous_proteus",
+      "breakpoints": true
     }
   ]
 }

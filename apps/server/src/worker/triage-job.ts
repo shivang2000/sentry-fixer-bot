@@ -5,10 +5,12 @@ import { eq } from "drizzle-orm";
 import { log } from "../log";
 import { publishJob } from "../queue/boss";
 import { JOB_AGENT, type TriageJob } from "../queue/jobs";
+import { appendRunLog } from "../runs/log";
 import { createRun, updateRun } from "../runs/persist";
 import { extractStackTrace, getLatestEvent } from "../sentry/client";
 import { postIssueComment } from "../sentry/comment";
 import { classify } from "../triage/classify";
+import { resolveOrCreateRepoConfig } from "../triage/resolve-repo";
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"] as const;
 type Severity = (typeof SEVERITY_ORDER)[number];
@@ -33,7 +35,30 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     .from(reposConfig)
     .where(eq(reposConfig.sentryProject, alert.sentryProject))
     .limit(1);
-  const cfg = cfgRows[0];
+  let cfg: (typeof cfgRows)[number] | undefined = cfgRows[0];
+
+  // Auto-discover: if no repos_config row, gh-search the slug and
+  // insert a sensible default. Operator can edit later via /repos.
+  if (!cfg) {
+    const created = await resolveOrCreateRepoConfig(alert.sentryProject).catch((e) => {
+      log.warn(
+        { project: alert.sentryProject, err: e instanceof Error ? e.message : e },
+        "resolve repo failed",
+      );
+      return null;
+    });
+    if (created) {
+      log.info({ project: alert.sentryProject, github: created.github }, "repo auto-registered");
+      const fresh = await db
+        .select()
+        .from(reposConfig)
+        .where(eq(reposConfig.id, created.id))
+        .limit(1);
+      cfg = fresh[0];
+    }
+  }
+
+  // (runId not yet created here, log via runId below once we have it.)
 
   // Start a run row regardless of repo-configured (so unknown-repo alerts are visible)
   const runId = await createRun({
@@ -41,21 +66,65 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     repo: cfg?.github,
     status: "running",
   });
+  await appendRunLog({
+    runId,
+    level: "info",
+    source: "triage",
+    message: `Triage start. Project: ${alert.sentryProject}. Issue: ${alert.sentryIssueId}. Title: ${alert.title}`,
+  });
+  if (cfg) {
+    await appendRunLog({
+      runId,
+      level: "info",
+      source: "triage",
+      message: `Matched repos_config row → ${cfg.github} (branch ${cfg.defaultBranch})`,
+    });
+  }
 
   // Fetch stack trace from Sentry (best effort)
   let stackTrace = "";
   try {
     const ev = await getLatestEvent(alert.sentryIssueId);
     stackTrace = ev ? extractStackTrace(ev) : "";
+    await appendRunLog({
+      runId,
+      level: "info",
+      source: "sentry",
+      message: stackTrace
+        ? `Fetched stack trace (${stackTrace.length} bytes).`
+        : "Sentry issue had no exception event.",
+    });
   } catch (e) {
-    log.warn({ alertId: alert.id, err: e instanceof Error ? e.message : e }, "sentry fetch failed");
+    const msg = e instanceof Error ? e.message : String(e);
+    log.warn({ alertId: alert.id, err: msg }, "sentry fetch failed");
+    await appendRunLog({ runId, level: "warn", source: "sentry", message: `fetch failed: ${msg}` });
   }
 
-  // Classify
-  const triage = await classify({ title: alert.title, stackTrace }).catch((e) => {
-    log.error({ err: e instanceof Error ? e.message : e }, "classify failed");
+  await appendRunLog({
+    runId,
+    level: "info",
+    source: "triage",
+    message: "Classifying via claude…",
+  });
+  const triage = await classify({ title: alert.title, stackTrace }).catch(async (e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    log.error({ err: msg }, "classify failed");
+    await appendRunLog({
+      runId,
+      level: "error",
+      source: "triage",
+      message: `classify failed: ${msg}`,
+    });
     return null;
   });
+  if (triage) {
+    await appendRunLog({
+      runId,
+      level: "info",
+      source: "triage",
+      message: `Severity: ${triage.severity}. Suspected files: ${triage.suspectedFiles.join(", ") || "—"}. Summary: ${triage.summary}`,
+    });
+  }
 
   await updateRun(runId, {
     severity: triage?.severity ?? "medium",
@@ -66,6 +135,12 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
 
   // Unknown repo → comment + stop
   if (!cfg) {
+    await appendRunLog({
+      runId,
+      level: "warn",
+      source: "triage",
+      message: `No repos_config row for project "${alert.sentryProject}" and gh search returned no candidate. Skipping agent run.`,
+    });
     await postIssueComment(
       alert.sentryIssueId,
       `sentry-fixer-bot: project "${alert.sentryProject}" is not in repos_config — add it to enable agent fixes.`,
@@ -76,6 +151,12 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
 
   // Severity below threshold → triage-only
   if (!severityAllowed(triage?.severity ?? "medium", cfg.minSeverityToFix)) {
+    await appendRunLog({
+      runId,
+      level: "info",
+      source: "triage",
+      message: `Severity ${triage?.severity} < min ${cfg.minSeverityToFix}. Triage-only, no agent fix.`,
+    });
     await postIssueComment(
       alert.sentryIssueId,
       `sentry-fixer-bot: triaged as ${triage?.severity}. Below configured min severity (${cfg.minSeverityToFix}); not attempting a fix.`,
@@ -84,6 +165,11 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     return;
   }
 
-  // Enqueue agent job
+  await appendRunLog({
+    runId,
+    level: "info",
+    source: "triage",
+    message: `Enqueuing agent job → ${cfg.github}`,
+  });
   await publishJob(JOB_AGENT, { alertId: alert.id, runId, repo: cfg.github });
 }

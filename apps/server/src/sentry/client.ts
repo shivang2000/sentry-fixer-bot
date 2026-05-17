@@ -1,10 +1,11 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { getSentryToken } from "@sentry-fixer-bot/api/run/sentry-runner";
 
 const SENTRY_BASE = "https://sentry.io/api/0";
 
-function authHeaders(): Record<string, string> {
-  if (!env.SENTRY_API_TOKEN) throw new Error("SENTRY_API_TOKEN is not configured");
-  return { Authorization: `Bearer ${env.SENTRY_API_TOKEN}` };
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getSentryToken();
+  if (!token) throw new Error("SENTRY_API_TOKEN is not configured");
+  return { Authorization: `Bearer ${token}` };
 }
 
 export type SentryEvent = {
@@ -18,8 +19,9 @@ export type SentryEvent = {
 
 /** Fetch the latest event for an issue. Used by triage to read the stack trace. */
 export async function getLatestEvent(issueId: string): Promise<SentryEvent | null> {
+  const headers = await authHeaders();
   const res = await fetch(`${SENTRY_BASE}/issues/${issueId}/events/latest/`, {
-    headers: { ...authHeaders(), Accept: "application/json" },
+    headers: { ...headers, Accept: "application/json" },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Sentry getLatestEvent ${res.status}`);
