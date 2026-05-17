@@ -7,22 +7,16 @@ import {
   CardTitle,
 } from "@sentry-fixer-bot/ui/components/card";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Check, ChevronDown, ChevronRight, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
 import { InlineLoginSession, type LoginProvider } from "@/components/inline-login-session";
 import { Stepper } from "@/components/stepper";
 import { trpc } from "@/utils/trpc";
 
-const searchSchema = z.object({
-  force: z.union([z.string(), z.number(), z.boolean()]).optional(),
-});
-
 export const Route = createFileRoute("/")({
-  validateSearch: searchSchema,
   component: HomeWizard,
 });
 
@@ -47,9 +41,6 @@ const SHELL_PROVIDERS: Record<string, LoginProvider> = {
 
 function HomeWizard() {
   const qc = useQueryClient();
-  const { force } = useSearch({ from: "/" });
-  const forced = force !== undefined && force !== false && force !== "" && force !== "0";
-  const navigate = useNavigate();
   const [expandedShellId, setExpandedShellId] = useState<string | null>(null);
   // Poll setup.status every 3 seconds while a shell is open. WS exit
   // messages are the primary signal but a CLI that writes its creds
@@ -63,12 +54,12 @@ function HomeWizard() {
   });
 
   const steps = status.data?.steps ?? [];
-  const ready = status.data?.ready ?? false;
   const current = steps.find((s) => !s.done);
 
-  useEffect(() => {
-    if (ready && !forced) navigate({ to: "/chat" });
-  }, [ready, forced, navigate]);
+  // No auto-redirect. The wizard is the explicit Home — clicking it
+  // from the sidebar should always show the steps + status, even when
+  // everything is green. Operators wanted a place to see "all set"
+  // and re-check pills; auto-jumping to /chat hid that.
 
   // When a step the operator is currently shelling for flips done
   // (via polling OR via the WS exit handler), auto-collapse the shell
