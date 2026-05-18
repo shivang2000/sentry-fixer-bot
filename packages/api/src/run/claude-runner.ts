@@ -101,3 +101,56 @@ export async function claudeMcpList(): Promise<{ entries: McpListEntry[]; raw: s
   }
   return { entries, raw: res.stdout };
 }
+
+export type ClaudeUsageSnapshot = {
+  /** `/usage` slash command output. Subscription/account status. */
+  usage: string;
+  /** `/extra-usage` output. Whether org has extra usage credits left. */
+  extraUsage: string;
+  /** `/context` output. Per-session token budget breakdown. */
+  context: string;
+  checkedAt: string;
+};
+
+/**
+ * Run claude's `/usage`, `/extra-usage`, and `/context` slash commands
+ * in `--print` mode and return their raw output. Used by /usage in the
+ * UI to surface real-time quota state.
+ *
+ * Note: in `--print` mode the slash commands return only the textual
+ * lines (no interactive TUI), so the answer is whatever claude itself
+ * decides to print. We don't parse — let the UI render the raw text
+ * verbatim so future CLI updates flow through without re-coding.
+ *
+ * Each call is bounded to 10s; a slow claude (no network) shouldn't
+ * hang the request. Errors are surfaced as the snapshot string so the
+ * UI can show "claude not authenticated" inline instead of failing.
+ */
+export async function claudeUsageSnapshot(): Promise<ClaudeUsageSnapshot> {
+  const [usage, extraUsage, ctx] = await Promise.all([
+    runSlash("/usage"),
+    runSlash("/extra-usage"),
+    runSlash("/context"),
+  ]);
+  return {
+    usage,
+    extraUsage,
+    context: ctx,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function runSlash(cmd: string): Promise<string> {
+  try {
+    const res = await Promise.race([
+      claude(["--print", cmd]),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 15_000)),
+    ]);
+    if (res.exitCode !== 0) {
+      return `(${cmd} exited ${res.exitCode}: ${res.stderr.trim().slice(0, 200)})`;
+    }
+    return res.stdout.trim();
+  } catch (err) {
+    return `(${cmd} failed: ${err instanceof Error ? err.message : String(err)})`;
+  }
+}

@@ -1,5 +1,7 @@
+import { extractAssistantText } from "../agent/parse-output";
 import { renderClaudeHome } from "../agent/render-claude-home";
 import { spawnClaudeAgent } from "../agent/spawn";
+import { bindStreamToRunLogs } from "../agent/stream-parser";
 
 export type ReviewVerdict = "blocker" | "nit" | "approve" | "unknown";
 
@@ -18,6 +20,12 @@ export type ReviewInput = {
   baseBranch: string;
   alertTitle: string;
   agentSummary: string;
+  /**
+   * Run id the reviewer's stream events should be attached to in
+   * `run_logs`. Optional so legacy callers (none today) still compile;
+   * caller in agent-job.ts always passes the parent run's id.
+   */
+  runId?: string;
 };
 
 /**
@@ -49,7 +57,15 @@ export async function runReviewer(input: ReviewInput): Promise<ReviewResult> {
     diff,
   });
   const { mcpConfigPath } = await renderClaudeHome({ repo: input.repo, runDir: input.cwd });
-  const res = await spawnClaudeAgent({ cwd: input.cwd, prompt, mcpConfigPath });
+  const res = await spawnClaudeAgent({
+    cwd: input.cwd,
+    prompt,
+    mcpConfigPath,
+    // Stream review events into the same run timeline (different
+    // source so the UI can distinguish them later). Skip when the
+    // caller didn't pass a runId — keeps reviewer usable in isolation.
+    onLine: input.runId ? bindStreamToRunLogs(input.runId, "reviewer-stream") : undefined,
+  });
   const parsed = parseReview(res.stdout);
   return {
     verdict: parsed.verdict,
@@ -128,12 +144,15 @@ ${input.diff}
 }
 
 function parseReview(stdout: string): { verdict: ReviewVerdict; body: string } {
-  const m = stdout.match(/<review>([\s\S]*?)<\/review>/i);
+  // stdout is JSONL when streaming is on (the default). Pull the
+  // final assistant text out before applying the <review> regex.
+  const text = extractAssistantText(stdout);
+  const m = text.match(/<review>([\s\S]*?)<\/review>/i);
   if (!m || m[1] === undefined) {
-    // No envelope — return the raw stdout as a "unknown" verdict so the
-    // operator can still see what the reviewer said. agent-job will
+    // No envelope — return the assistant text as a "unknown" verdict so
+    // the operator can still see what the reviewer said. agent-job will
     // treat unknown as a non-blocking comment.
-    return { verdict: "unknown", body: stdout.trim().slice(0, 4_000) };
+    return { verdict: "unknown", body: text.trim().slice(0, 4_000) };
   }
   const body = m[1].trim();
   const v = body.match(/<verdict>\s*([a-z]+)\s*<\/verdict>/i)?.[1]?.toLowerCase() ?? "";

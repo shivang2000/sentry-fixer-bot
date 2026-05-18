@@ -4,6 +4,7 @@ import { prs } from "@sentry-fixer-bot/db/schema/domain";
 import { env } from "@sentry-fixer-bot/env/server";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { getPrState } from "../github/pr-ops";
 import { log } from "../log";
 import { publishJob } from "../queue/boss";
 import { JOB_PR_FOLLOWUP } from "../queue/jobs";
@@ -132,7 +133,12 @@ export async function dispatchPrComment(input: {
   const cfg = cfgRows[0];
   if (!cfg) return { ignored: "no_repo_config" };
 
-  if (!cfg.prReviewers.includes(input.comment.author)) {
+  // Empty allow-list = "no allow-list" → anyone can drive /sfb. This
+  // is the right default for solo operators who don't want to maintain
+  // a list. As soon as the operator adds even one entry to
+  // reposConfig.prReviewers, the gate becomes strict: only listed
+  // GitHub usernames can issue /sfb commands.
+  if (cfg.prReviewers.length > 0 && !cfg.prReviewers.includes(input.comment.author)) {
     log.info(
       { repo: input.repo, author: input.comment.author },
       "[gh-webhook] sender not in allow list",
@@ -155,6 +161,20 @@ export async function dispatchPrComment(input: {
     new Date(input.comment.createdAt) <= prRow.lastReviewedCommentAt
   ) {
     return { ignored: "older_than_watermark" };
+  }
+
+  // Hard guardrail: a closed or merged PR is a terminal state for the
+  // bot. The reviewer has resolved the conversation by closing — any
+  // further commits on the bot's branch would be wasted work the
+  // reviewer can no longer see. `unknown` fails open (transient API
+  // error shouldn't block legitimate work).
+  const prState = await getPrState({ repo: input.repo, prNumber: input.prNumber });
+  if (prState === "closed" || prState === "merged") {
+    log.info(
+      { repo: input.repo, prNumber: input.prNumber, state: prState },
+      "[gh-webhook] skipping followup — pr is closed/merged",
+    );
+    return { ignored: `pr_${prState}` };
   }
 
   await publishJob(JOB_PR_FOLLOWUP, {

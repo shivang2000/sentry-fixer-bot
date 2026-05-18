@@ -52,6 +52,39 @@ export async function markPrReady(input: { repo: string; prNumber: number }): Pr
   return proc.exited;
 }
 
+/**
+ * Live PR state from GitHub. `closed` and `merged` are terminal —
+ * follow-up actions on those PRs are no-ops because pushing to a
+ * branch whose PR is already closed/merged is a privileged-looking
+ * action with no useful outcome (GitHub doesn't re-open the PR
+ * automatically). Returns `unknown` on API failure so the caller can
+ * fail open and we don't accidentally block on transient errors.
+ */
+export type PrState = "open" | "closed" | "merged" | "unknown";
+
+export async function getPrState(input: { repo: string; prNumber: number }): Promise<PrState> {
+  const token = await resolveGithubToken();
+  const url = `https://api.github.com/repos/${input.repo}/pulls/${input.prNumber}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        Accept: "application/vnd.github+json",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return "unknown";
+    const data = (await res.json()) as { state?: string; merged_at?: string | null };
+    if (data.merged_at) return "merged";
+    if (data.state === "closed") return "closed";
+    if (data.state === "open") return "open";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export type PrComment = {
   id: string;
   body: string;

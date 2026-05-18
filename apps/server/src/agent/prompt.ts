@@ -24,7 +24,7 @@ export type PromptInput = {
  *                                metadata (breadcrumbs, replays,
  *                                org-wide context) beyond what the
  *                                webhook payload includes.
- *   /superpowers:brainstorming — Forces the structured root-cause
+ *   /brainstorming — Forces the structured root-cause
  *                                analysis flow before the agent writes
  *                                code. Reduces shotgun fixes.
  *
@@ -32,7 +32,12 @@ export type PromptInput = {
  * bundle. If a skill is removed by an operator, claude no-ops on the
  * invocation rather than erroring.
  */
-const SKILL_PREFIX = ["/sentry-cli", "/superpowers:brainstorming"].join("\n");
+// Skills live as flat directory names under ~/.claude/skills/. Claude's
+// slash-command resolver doesn't understand a `bundle:skill` namespace
+// — it looks up the exact dir name. The superpowers bundle ships
+// subskills as `skills/brainstorming/SKILL.md` etc., which we symlink
+// flat into the claude skills dir on bootstrap (see bootstrap-defaults).
+const SKILL_PREFIX = ["/sentry-cli", "/brainstorming"].join("\n");
 
 export function renderAgentPrompt(input: PromptInput): string {
   const filesHint =
@@ -53,7 +58,7 @@ You are a software engineer triaging a production exception.
 
 Your job:
 1. Read the stack trace and identify the root cause. Use the
-   /superpowers:brainstorming flow before writing any fix — list 2-3
+   /brainstorming flow before writing any fix — list 2-3
    competing hypotheses, then pick one with evidence.
 2. Make the minimal code change that fixes the issue.
 3. Add a test that fails before the fix and passes after.
@@ -100,20 +105,34 @@ ${filesHint}`;
 }
 
 /**
- * The step-4 line of the prompt depends on whether a test command was
- * detected. If yes, the gate will hard-block the PR on test failure,
- * so the agent must run + pass it. If no, the agent should still
- * sanity-check its fix but the worker won't enforce anything.
+ * The step-4 instruction. Critically: claude is told NOT to run the
+ * test suite itself. Reasons:
+ *
+ *   1. Claude's Bash tool has a ~2 min per-call timeout. Real-world
+ *      `npm run test:coverage` / `mvn verify` / `pytest --cov` jobs
+ *      routinely take 4-10 min. Mid-call SIGKILL with Exit 137 ends
+ *      up burning the whole agent timeout for no value.
+ *
+ *   2. The worker runs the test gate externally (`runRepoTests`) with
+ *      no claude-side limit anyway. Whatever claude would run, the
+ *      gate also runs — duplicating it just doubles the wait.
+ *
+ *   3. On failure, the retry prompt feeds back stdout/stderr from the
+ *      worker's run so claude can diagnose on the next attempt.
+ *
+ * When no test command is detected, the gate is skipped and claude
+ * gets the same "verify manually" hint we always gave.
  */
 function testStep(testCommand: string | null): string {
   if (testCommand) {
-    return `**MANDATORY**: Run \`${testCommand}\` and confirm it exits 0
-   before you finish. If dependencies are missing, install them first
-   using the repo's package manager (npm/pnpm/yarn/poetry/pip/maven/
-   gradle/cargo/go mod/etc — pick the one matching the lockfile in
-   this repo). If the command fails, FIX it before stopping. The
-   CI/CD pipeline runs this exact command on merge; if it fails here,
-   the PR will not be opened.`;
+    return `Do NOT run tests yourself. The worker will execute
+   \`${testCommand}\` automatically after you finish and use the
+   result as a hard merge gate. Running tests inside your own Bash
+   tool would hit its 2-minute timeout long before this repo's test
+   suite finishes, and would only duplicate what the worker is going
+   to do anyway. If a previous attempt's test output is supplied in a
+   <previous-attempt> block, use it to diagnose; otherwise write the
+   fix, write any tests it implies, and stop.`;
   }
   return `No automated test command was detected in this repo (no
    package.json/pyproject.toml/pom.xml/build.gradle/go.mod/Cargo.toml/

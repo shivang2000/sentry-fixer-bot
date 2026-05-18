@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@sentry-fixer-bot/ui/components/skeleton";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  Activity,
   Bot,
   Database,
   History,
@@ -52,7 +53,10 @@ const NAV_OPERATE = [
   { to: "/skills", label: "Skills", icon: Sparkles },
 ] as const;
 
-const NAV_OBSERVE = [{ to: "/runs", label: "Runs", icon: History }] as const;
+const NAV_OBSERVE = [
+  { to: "/runs", label: "Runs", icon: History },
+  { to: "/usage", label: "Usage", icon: Activity },
+] as const;
 
 const NAV_SYSTEM = [
   { to: "/doctor", label: "Doctor", icon: Stethoscope },

@@ -81,6 +81,18 @@ export async function createWorkspace(input: {
   // fetched origin/<baseBranch>. `-B` resets the branch if it
   // somehow exists already.
   await mkdir(env.WORK_DIR, { recursive: true });
+
+  // Defensive cleanup. A prior worker (or container crash mid-run)
+  // can leave the dir + a registry entry behind. `prune` clears
+  // dangling registry entries; rm wipes any leftover dir. Without
+  // this, `git worktree add` aborts with "fatal: <dir> already
+  // exists" or "branch already used by worktree".
+  await spawn(["git", "worktree", "prune"], { cwd: cache });
+  if (await exists(dir)) {
+    await spawn(["git", "worktree", "remove", "--force", dir], { cwd: cache });
+    await rm(dir, { recursive: true, force: true });
+  }
+
   const wt = await spawn(
     ["git", "worktree", "add", "-B", branch, dir, `origin/${input.baseBranch}`],
     { cwd: cache },
@@ -133,6 +145,18 @@ export async function attachWorkspace(input: {
     throw new Error(`git fetch failed: ${fetch.stderr}`);
   }
   await mkdir(env.WORK_DIR, { recursive: true });
+
+  // Defensive cleanup: if a prior worker died mid-run, the dir + the
+  // worktree registry entry in the cache might still be hanging
+  // around. `prune` cleans dangling registry entries; `rm -rf` deals
+  // with the leftover dir. Without this, `git worktree add` aborts
+  // with "fatal: <dir> already exists".
+  await spawn(["git", "worktree", "prune"], { cwd: cache });
+  if (await exists(dir)) {
+    await spawn(["git", "worktree", "remove", "--force", dir], { cwd: cache });
+    await rm(dir, { recursive: true, force: true });
+  }
+
   const wt = await spawn(["git", "worktree", "add", dir, input.branch], { cwd: cache });
   if (wt.exit !== 0) {
     throw new Error(`git worktree add (re-attach) failed: ${wt.stderr}`);

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReposRouteImport } from './routes/repos'
@@ -22,6 +23,11 @@ import { Route as RunsIndexRouteImport } from './routes/runs.index'
 import { Route as RunsIdRouteImport } from './routes/runs.$id'
 import { Route as ReposIdRouteImport } from './routes/repos.$id'
 
+const UsageRoute = UsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SkillsRoute = SkillsRouteImport.update({
   id: '/skills',
   path: '/skills',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/repos': typeof ReposRouteWithChildren
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/usage': typeof UsageRoute
   '/repos/$id': typeof ReposIdRoute
   '/runs/$id': typeof RunsIdRoute
   '/runs/': typeof RunsIndexRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/repos': typeof ReposRouteWithChildren
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/usage': typeof UsageRoute
   '/repos/$id': typeof ReposIdRoute
   '/runs/$id': typeof RunsIdRoute
   '/runs': typeof RunsIndexRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/repos': typeof ReposRouteWithChildren
   '/settings': typeof SettingsRoute
   '/skills': typeof SkillsRoute
+  '/usage': typeof UsageRoute
   '/repos/$id': typeof ReposIdRoute
   '/runs/$id': typeof RunsIdRoute
   '/runs/': typeof RunsIndexRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/settings'
     | '/skills'
+    | '/usage'
     | '/repos/$id'
     | '/runs/$id'
     | '/runs/'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/settings'
     | '/skills'
+    | '/usage'
     | '/repos/$id'
     | '/runs/$id'
     | '/runs'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/settings'
     | '/skills'
+    | '/usage'
     | '/repos/$id'
     | '/runs/$id'
     | '/runs/'
@@ -181,12 +193,20 @@ export interface RootRouteChildren {
   ReposRoute: typeof ReposRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   SkillsRoute: typeof SkillsRoute
+  UsageRoute: typeof UsageRoute
   RunsIdRoute: typeof RunsIdRoute
   RunsIndexRoute: typeof RunsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/usage': {
+      id: '/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof UsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/skills': {
       id: '/skills'
       path: '/skills'
@@ -294,6 +314,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReposRoute: ReposRouteWithChildren,
   SettingsRoute: SettingsRoute,
   SkillsRoute: SkillsRoute,
+  UsageRoute: UsageRoute,
   RunsIdRoute: RunsIdRoute,
   RunsIndexRoute: RunsIndexRoute,
 }

@@ -4,13 +4,16 @@ import { alerts, prs } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
 import { renderClaudeHome } from "../agent/render-claude-home";
 import { spawnClaudeAgent } from "../agent/spawn";
+import { bindStreamToRunLogs } from "../agent/stream-parser";
 import { attachWorkspace } from "../agent/workspace";
 import { resolveTestCommand } from "../gate/detect-test-command";
+import { ensureDeps } from "../gate/ensure-deps";
 import { runRepoTests } from "../gate/run-tests";
 import { resolveGithubToken } from "../github/auth";
-import { commentOnPr, markPrReady } from "../github/pr-ops";
+import { commentOnPr, getPrState, markPrReady } from "../github/pr-ops";
 import { log } from "../log";
 import type { PrFollowupJob } from "../queue/jobs";
+import { appendRunLog } from "../runs/log";
 
 const MAX_FOLLOWUP_ATTEMPTS = 3;
 
@@ -37,10 +40,48 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     return;
   }
 
+  // From here on, mirror every meaningful state transition into
+  // run_logs (keyed off the ORIGINAL agent run's id) so the operator
+  // can watch follow-up activity inline at /runs/<id> alongside the
+  // initial agent run. Single timeline per PR — no separate UI needed.
+  await appendRunLog({
+    runId: pr.runId,
+    level: "info",
+    source: "pr-followup",
+    message: `Picked up /sfb comment from @${job.commentAuthor} on PR #${pr.number}: ${job.commentBody.slice(0, 200)}`,
+  });
+
   // Idempotency guard. The same comment can arrive via webhook AND via
   // the cron fallback within the same minute; only one should run.
   if (pr.lastReviewedCommentAt && new Date(job.commentCreatedAt) <= pr.lastReviewedCommentAt) {
     log.info({ prId: job.prId, commentId: job.commentId }, "[pr-followup] older than watermark");
+    await appendRunLog({
+      runId: pr.runId,
+      level: "debug",
+      source: "pr-followup",
+      message: "Comment older than watermark — already processed; skipping.",
+    });
+    return;
+  }
+
+  // Hard guardrail: if the human reviewer closed (or someone merged)
+  // the PR between job dispatch and pickup, no action is appropriate.
+  // Pushing more commits to a closed PR is invisible to the reviewer
+  // and wastes claude tokens. Advance the watermark so the same
+  // comment doesn't re-fire on the next cron tick.
+  const state = await getPrState({ repo: pr.repo, prNumber: pr.number });
+  if (state === "closed" || state === "merged") {
+    log.info(
+      { prId: pr.id, prNumber: pr.number, state },
+      "[pr-followup] pr is closed/merged — skipping",
+    );
+    await appendRunLog({
+      runId: pr.runId,
+      level: "warn",
+      source: "pr-followup",
+      message: `PR is ${state} — no action taken. Watermark advanced so this comment isn't re-tried.`,
+    });
+    await advanceWatermark(pr.id, job.commentCreatedAt, "none");
     return;
   }
 
@@ -57,6 +98,12 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
   )[0];
 
   await db.update(prs).set({ humanReviewState: "in_progress" }).where(eq(prs.id, pr.id));
+  await appendRunLog({
+    runId: pr.runId,
+    level: "info",
+    source: "pr-followup",
+    message: "humanReviewState=in_progress; attaching worktree…",
+  });
 
   const ws = await attachWorkspace({
     followupId: job.commentId,
@@ -68,6 +115,12 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     // than to denormalize again.
     branch: await branchForPr(pr.runId),
   });
+  await appendRunLog({
+    runId: pr.runId,
+    level: "info",
+    source: "pr-followup",
+    message: `Worktree re-attached at ${ws.dir} (branch ${ws.branch}).`,
+  });
 
   try {
     const instruction = stripSfbPrefix(job.commentBody);
@@ -75,6 +128,31 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
       cwd: ws.dir,
       override: cfg.testCommand ?? null,
     });
+    await appendRunLog({
+      runId: pr.runId,
+      level: "info",
+      source: "pr-followup",
+      message: resolvedTest
+        ? `Test command (${resolvedTest.source}): ${resolvedTest.command}`
+        : "No test command detected — gate will be skipped.",
+    });
+
+    // Install deps before the gate runs. Followup worktrees are fresh
+    // re-attaches off the cached repo and have no node_modules. Same
+    // rationale as the primary agent path: one install per worktree,
+    // not per attempt; gate failures are real failures.
+    if (resolvedTest) {
+      const dep = await ensureDeps({ cwd: ws.dir });
+      await appendRunLog({
+        runId: pr.runId,
+        level: dep.ran && dep.exitCode !== 0 ? "warn" : "info",
+        source: "pr-followup",
+        message: dep.ran
+          ? `${dep.command} → exit ${dep.exitCode} in ${(dep.durationMs / 1000).toFixed(1)}s`
+          : "No recognised lockfile/manifest; skipping dependency install.",
+      });
+    }
+
     const basePrompt = renderFollowupPrompt({
       alertTitle: alert?.title ?? "(unknown)",
       reviewer: job.commentAuthor,
@@ -101,16 +179,35 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
           ? basePrompt
           : `${basePrompt}\n\n---\n\n<previous-attempt>\nYour previous attempt to apply the reviewer's instruction has been\nwritten to the worktree, but \`${resolvedTest?.command}\` is still\nfailing. This is attempt ${attempt}/${MAX_FOLLOWUP_ATTEMPTS}; if you\ncannot make the tests pass, the changes will NOT be pushed.\n\nDiagnose from the output below and apply the smallest fix that turns\nthe suite green. Do not revert your earlier diff unless it was the\ncause.\n\nTEST STDOUT (tail):\n${lastTestStdout.slice(-3000) || "(empty)"}\n\nTEST STDERR (tail):\n${lastTestStderr.slice(-3000) || "(empty)"}\n</previous-attempt>\n`;
 
+      await appendRunLog({
+        runId: pr.runId,
+        level: "info",
+        source: "pr-followup",
+        message:
+          attempt === 1
+            ? `Attempt ${attempt}/${MAX_FOLLOWUP_ATTEMPTS}: spawning claude with reviewer's instruction…`
+            : `Attempt ${attempt}/${MAX_FOLLOWUP_ATTEMPTS}: re-spawning claude with failing-test context…`,
+      });
       const res = await spawnClaudeAgent({
         cwd: ws.dir,
         prompt: promptForAttempt,
         mcpConfigPath,
+        // Stream into the ORIGINAL run's timeline so the operator
+        // sees one continuous story per PR — initial fix + every
+        // /sfb follow-up — at /runs/<id>.
+        onLine: bindStreamToRunLogs(pr.runId, "followup-stream"),
       });
       agentExit = res.exitCode;
       log.info(
         { exit: res.exitCode, ms: res.durationMs, prId: pr.id, attempt },
         "[pr-followup] claude attempt",
       );
+      await appendRunLog({
+        runId: pr.runId,
+        level: res.exitCode === 0 ? "info" : "error",
+        source: "pr-followup",
+        message: `claude exit ${res.exitCode} in ${(res.durationMs / 1000).toFixed(1)}s (attempt ${attempt})`,
+      });
 
       if (res.exitCode !== 0) break;
 
@@ -125,10 +222,26 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
       testPassed = testRes.passed;
       lastTestStdout = testRes.stdout;
       lastTestStderr = testRes.stderr;
+      await appendRunLog({
+        runId: pr.runId,
+        level: testRes.passed ? "info" : "warn",
+        source: "pr-followup",
+        message: testRes.passed
+          ? `Tests passed on attempt ${attempt}.`
+          : attempt < MAX_FOLLOWUP_ATTEMPTS
+            ? `Tests failed on attempt ${attempt}. Will retry.`
+            : `Tests failed on attempt ${attempt} (final). Not pushing.`,
+      });
       if (testRes.passed) break;
     }
 
     if (agentExit !== 0) {
+      await appendRunLog({
+        runId: pr.runId,
+        level: "error",
+        source: "pr-followup",
+        message: `Aborting: claude exited ${agentExit}. PR left waiting for human action.`,
+      });
       await commentOnPr({
         repo: pr.repo,
         prNumber: pr.number,
@@ -139,6 +252,12 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     }
 
     if (resolvedTest && testPassed === false) {
+      await appendRunLog({
+        runId: pr.runId,
+        level: "error",
+        source: "pr-followup",
+        message: `Aborting after ${MAX_FOLLOWUP_ATTEMPTS} attempts: tests still failing. PR left waiting for human action.`,
+      });
       await commentOnPr({
         repo: pr.repo,
         prNumber: pr.number,
@@ -166,6 +285,12 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
           await db.update(prs).set({ isDraft: false }).where(eq(prs.id, pr.id));
         }
       }
+      await appendRunLog({
+        runId: pr.runId,
+        level: "info",
+        source: "pr-followup",
+        message: `Pushed new commit to ${ws.branch} per @${job.commentAuthor}. PR flipped to ready for re-review.`,
+      });
       await commentOnPr({
         repo: pr.repo,
         prNumber: pr.number,
@@ -173,6 +298,13 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
       });
       await advanceWatermark(pr.id, job.commentCreatedAt, "none");
     } else {
+      await appendRunLog({
+        runId: pr.runId,
+        level: "warn",
+        source: "pr-followup",
+        message:
+          "Claude produced no diff for this instruction. PR left waiting for a more specific /sfb.",
+      });
       await commentOnPr({
         repo: pr.repo,
         prNumber: pr.number,
@@ -183,6 +315,12 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error({ err: msg, prId: pr.id }, "[pr-followup] failed");
+    await appendRunLog({
+      runId: pr.runId,
+      level: "error",
+      source: "pr-followup",
+      message: `Follow-up errored: ${msg}`,
+    });
     await commentOnPr({
       repo: pr.repo,
       prNumber: pr.number,
@@ -213,8 +351,13 @@ function renderFollowupPrompt(input: {
   instruction: string;
   testCommand: string | null;
 }): string {
+  // Do NOT ask claude to run the test suite. Its Bash tool has a ~2
+  // min per-call timeout while real test suites take 4-10 min, so the
+  // call gets SIGKILL'd (Exit 137) and wastes the agent budget. The
+  // worker runs `${input.testCommand}` externally after claude exits
+  // and uses the result as the push gate.
   const testStep = input.testCommand
-    ? `- Run \`${input.testCommand}\` and make sure it still passes. The worker will re-run this command; if it fails, the change will NOT be pushed.`
+    ? `- Do NOT run tests yourself. After you finish, the worker will run \`${input.testCommand}\` and refuse to push if it fails. Just write the change.`
     : "- No automated test command was detected in this repo; verify your change manually against the reviewer's intent.";
   return `/sentry-cli
 

@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, router } from "../index";
+import { claudeUsageSnapshot } from "../run/claude-runner";
 import { runCommand } from "../run/npm-runner";
 
 export const systemRouter = router({
@@ -18,4 +19,15 @@ export const systemRouter = router({
         });
       }
     }),
+
+  /**
+   * Live snapshot of claude's `/usage`, `/extra-usage`, and `/context`
+   * slash commands. Surfaced on the Usage page so the operator can see
+   * subscription state + quota burn without leaving the dashboard.
+   *
+   * Spawns three claude --print invocations in parallel (~1-3s
+   * combined). Cheap enough to call per-page-load + a periodic refetch
+   * driven by the UI's react-query polling.
+   */
+  claudeUsage: adminProcedure.query(() => claudeUsageSnapshot()),
 });

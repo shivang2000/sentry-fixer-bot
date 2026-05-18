@@ -9,10 +9,12 @@ import { renderAgentPrompt } from "../agent/prompt";
 import { renderClaudeHome } from "../agent/render-claude-home";
 import { type SecretFinding, scanText } from "../agent/secret-scan";
 import { spawnClaudeAgent } from "../agent/spawn";
+import { bindStreamToRunLogs } from "../agent/stream-parser";
 import { createWorkspace } from "../agent/workspace";
 import { findAlertById } from "../alerts/persist";
 import { checkRepoBudget, recordUsage } from "../budget/enforce";
 import { resolveTestCommand } from "../gate/detect-test-command";
+import { ensureDeps } from "../gate/ensure-deps";
 import { runRepoTests } from "../gate/run-tests";
 import { openPr } from "../github/pr";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
@@ -52,25 +54,30 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
     return;
   }
 
-  await appendRunLog({
-    runId: payload.runId,
-    level: "info",
-    source: "agent",
-    message: `Cloning ${payload.repo}@${cfg.defaultBranch} into work dir…`,
-  });
-  const ws = await createWorkspace({
-    runId: payload.runId,
-    repo: payload.repo,
-    baseBranch: cfg.defaultBranch,
-  });
-  await appendRunLog({
-    runId: payload.runId,
-    level: "info",
-    source: "agent",
-    message: `Workspace ready: ${ws.dir} (branch ${ws.branch})`,
-  });
-
+  // ws is created inside the try so any workspace-creation failure
+  // (stale worktree, git fetch 401, disk full) flows through the
+  // catch and sets status=error instead of leaving the run stuck on
+  // "running" forever. The finally guards against ws being undefined
+  // when cleanup runs.
+  let ws: Awaited<ReturnType<typeof createWorkspace>> | undefined;
   try {
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "agent",
+      message: `Cloning ${payload.repo}@${cfg.defaultBranch} into work dir…`,
+    });
+    ws = await createWorkspace({
+      runId: payload.runId,
+      repo: payload.repo,
+      baseBranch: cfg.defaultBranch,
+    });
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "agent",
+      message: `Workspace ready: ${ws.dir} (branch ${ws.branch})`,
+    });
     // Resolve test command up-front so the agent's prompt can include
     // the exact command we'll gate on later. `cfg.testCommand` is an
     // override; otherwise we inspect the worktree's package.json. If
@@ -88,6 +95,48 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
         ? `Test command (${resolvedTest.source}): ${resolvedTest.command}`
         : "No test command found (no override + no test:coverage/test script). Skipping test gate.",
     });
+
+    // Install project dependencies BEFORE the agent runs. Reason: the
+    // gate later invokes `${resolvedTest.command}` which usually
+    // requires node_modules (or poetry env, etc.). A clean worktree
+    // has none. We can't ask claude to install — its Bash tool would
+    // either hit its 2-min timeout or fight with the gate. Running it
+    // here means: (1) one install per worktree, not per attempt; (2)
+    // gate failures will be real test failures, not "command not
+    // found". Best-effort: non-zero exit logged but doesn't abort —
+    // some repos warn but still produce a usable node_modules.
+    if (resolvedTest) {
+      await appendRunLog({
+        runId: payload.runId,
+        level: "info",
+        source: "deps",
+        message: "Detecting + installing project dependencies for test gate…",
+      });
+      const dep = await ensureDeps({ cwd: ws.dir });
+      if (dep.ran) {
+        await appendRunLog({
+          runId: payload.runId,
+          level: dep.exitCode === 0 ? "info" : "warn",
+          source: "deps",
+          message: `${dep.command} → exit ${dep.exitCode} in ${(dep.durationMs / 1000).toFixed(1)}s`,
+        });
+        if (dep.stderr && dep.exitCode !== 0) {
+          await appendRunLog({
+            runId: payload.runId,
+            level: "warn",
+            source: "deps",
+            message: dep.stderr.slice(-2000),
+          });
+        }
+      } else {
+        await appendRunLog({
+          runId: payload.runId,
+          level: "debug",
+          source: "deps",
+          message: "No recognised lockfile/manifest; skipping dependency install.",
+        });
+      }
+    }
 
     const prompt = renderAgentPrompt({
       title: alert.title,
@@ -136,7 +185,15 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
           ? `Retry attempt ${attempt}/${MAX_AGENT_ATTEMPTS}: re-spawning claude with failing-test context…`
           : `Spawning claude (model=sonnet, effort=high) in ${ws.dir}…`,
       });
-      agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt: attemptPrompt, mcpConfigPath });
+      agentRes = await spawnClaudeAgent({
+        cwd: ws.dir,
+        prompt: attemptPrompt,
+        mcpConfigPath,
+        // Stream each claude event (tool call / assistant text /
+        // result) into run_logs so /runs/<id> shows live progress
+        // instead of a single line + a long silent wait.
+        onLine: bindStreamToRunLogs(payload.runId, "agent-stream"),
+      });
       await appendRunLog({
         runId: payload.runId,
         level: agentRes.exitCode === 0 ? "info" : "error",
@@ -319,6 +376,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       baseBranch: cfg.defaultBranch,
       alertTitle: alert.title,
       agentSummary: outcome.summary,
+      runId: payload.runId,
     });
     await appendRunLog({
       runId: payload.runId,
@@ -403,7 +461,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       endedAt: new Date(),
     });
   } finally {
-    await ws.cleanup();
+    if (ws) await ws.cleanup();
   }
 }
 
@@ -466,9 +524,10 @@ make the tests pass on this attempt, the PR will NOT be opened.
 
 Diagnose the failure from the output below, then apply the smallest
 change that turns the suite green. Do not revert your earlier diff
-unless it was clearly the cause — prefer fixing forward. Re-run
-\`${input.testCommand}\` yourself before finishing this attempt to
-confirm the gate will pass.
+unless it was clearly the cause — prefer fixing forward. Do NOT run
+the test command yourself — the worker will re-run it after you
+finish. Your Bash tool has a 2-minute per-call timeout that this
+repo's suite usually exceeds, so a self-run would just get killed.
 
 TEST STDOUT (tail):
 ${input.testStdoutTail || "(empty)"}

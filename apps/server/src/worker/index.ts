@@ -67,12 +67,18 @@ async function main(): Promise<void> {
         handler: (jobs: Array<{ id: string; data: T }>) => Promise<void>,
       ): Promise<string>;
     }
-  ).work<AgentJob>(JOB_AGENT, { expireInSeconds: 30 * 60 }, async (jobs) => {
-    for (const job of jobs) {
-      log.info({ id: job.id, payload: job.data }, "agent job picked up");
-      await processAgentJob(job.data);
-    }
-  });
+  )
+    // retryLimit:0 — agent jobs are long, externally observable, and
+    // expensive (claude tokens + dep install + tests). If the worker
+    // throws (e.g. transient pg drop), surfacing the failure as
+    // agent_error is preferable to silently redoing the whole 10-min
+    // run. Operator can manually retrigger via /runs after diagnosing.
+    .work<AgentJob>(JOB_AGENT, { expireInSeconds: 30 * 60, retryLimit: 0 }, async (jobs) => {
+      for (const job of jobs) {
+        log.info({ id: job.id, payload: job.data }, "agent job picked up");
+        await processAgentJob(job.data);
+      }
+    });
 
   await boss.work<SentryPollJob>(JOB_SENTRY_POLL, async (jobs) => {
     for (const job of jobs) {
@@ -97,12 +103,19 @@ async function main(): Promise<void> {
         handler: (jobs: Array<{ id: string; data: T }>) => Promise<void>,
       ): Promise<string>;
     }
-  ).work<PrFollowupJob>(JOB_PR_FOLLOWUP, { expireInSeconds: 30 * 60 }, async (jobs) => {
-    for (const job of jobs) {
-      log.info({ id: job.id, payload: job.data }, "pr-followup job picked up");
-      await processPrFollowupJob(job.data);
-    }
-  });
+  )
+    // Same rationale as JOB_AGENT — surfacing as waiting_human via the
+    // catch handler is more useful than blind redelivery.
+    .work<PrFollowupJob>(
+      JOB_PR_FOLLOWUP,
+      { expireInSeconds: 30 * 60, retryLimit: 0 },
+      async (jobs) => {
+        for (const job of jobs) {
+          log.info({ id: job.id, payload: job.data }, "pr-followup job picked up");
+          await processPrFollowupJob(job.data);
+        }
+      },
+    );
 
   await boss.work<PrCommentPollJob>(JOB_PR_COMMENT_POLL, async (jobs) => {
     for (const _ of jobs) {

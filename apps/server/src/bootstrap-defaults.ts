@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { CATALOG } from "@sentry-fixer-bot/api/mcps-catalog";
 import { runCommand } from "@sentry-fixer-bot/api/run/npm-runner";
@@ -6,6 +6,56 @@ import { createDb } from "@sentry-fixer-bot/db";
 import { mcpInstalls, skillInstalls } from "@sentry-fixer-bot/db/schema/admin";
 import { and, eq, isNull } from "drizzle-orm";
 import { log } from "./log";
+
+/** Where claude's CLI looks up `/skill-name` slash commands. */
+function claudeSkillsDir(): string {
+  const home = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  return join(home, ".claude", "skills");
+}
+
+/**
+ * Link each subskill of a bundle into ~/.claude/skills/ as a flat
+ * directory name. Claude resolves `/<name>` against the immediate
+ * children of that dir — it does NOT understand a `bundle:name`
+ * namespace, so `/superpowers:brainstorming` would 404 even if the
+ * file existed under `skills/brainstorming/SKILL.md`. Flat-symlink
+ * each subdir and the prompt can invoke them via `/<name>`.
+ *
+ * Idempotent (uses `ln -sfn` semantics — replaces existing symlink).
+ * Skips non-directory entries inside the bundle (LICENSE, README, etc.).
+ * Logs the count of linked skills for observability.
+ */
+async function linkBundleSubskills(bundlePath: string): Promise<void> {
+  const src = join(bundlePath, "skills");
+  try {
+    await access(src);
+  } catch {
+    return; // bundle structure doesn't expose a skills/ dir; nothing to do
+  }
+  const target = claudeSkillsDir();
+  await mkdir(target, { recursive: true });
+  const entries = await readdir(src, { withFileTypes: true });
+  let linked = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const linkPath = join(target, entry.name);
+    try {
+      await rm(linkPath, { recursive: false, force: true });
+    } catch {
+      // ignore — symlink replacement is best-effort
+    }
+    try {
+      await symlink(join(src, entry.name), linkPath, "dir");
+      linked += 1;
+    } catch (err) {
+      log.warn(
+        { name: entry.name, err: err instanceof Error ? err.message : err },
+        "[bootstrap] failed to symlink skill",
+      );
+    }
+  }
+  log.info({ linked, target }, "[bootstrap] linked bundle subskills into claude skills dir");
+}
 
 const DEFAULT_SKILLS_REPO =
   process.env.SFB_DEFAULT_SKILLS_REPO ?? "https://github.com/obra/superpowers";
@@ -61,10 +111,20 @@ export async function bootstrapDefaults(): Promise<void> {
   }
 
   const existingSkill = await db
-    .select({ id: skillInstalls.id })
+    .select({ id: skillInstalls.id, storagePath: skillInstalls.storagePath })
     .from(skillInstalls)
     .where(eq(skillInstalls.sourceRef, DEFAULT_SKILLS_REPO))
     .limit(1);
+  // Already installed in a prior boot — relink subskills so /brainstorming
+  // etc. resolve. Cheap (~10 symlink ops); safe to repeat on every boot.
+  if (existingSkill.length > 0 && existingSkill[0]?.storagePath) {
+    await linkBundleSubskills(existingSkill[0].storagePath).catch((err) =>
+      log.warn(
+        { err: err instanceof Error ? err.message : err },
+        "[bootstrap] relink subskills failed",
+      ),
+    );
+  }
   if (existingSkill.length === 0) {
     const installId = crypto.randomUUID();
     const target = join(skillsRoot(), installId);
@@ -92,6 +152,12 @@ export async function bootstrapDefaults(): Promise<void> {
           installedBy: null,
         });
         log.info(`[bootstrap] installed skill:${DEFAULT_SKILLS_NAME}`);
+        await linkBundleSubskills(target).catch((err) =>
+          log.warn(
+            { err: err instanceof Error ? err.message : err },
+            "[bootstrap] post-clone link failed",
+          ),
+        );
       }
     } catch (err) {
       await rm(target, { recursive: true, force: true }).catch(() => undefined);

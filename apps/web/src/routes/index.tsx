@@ -477,37 +477,38 @@ function StepRow({ step, number, expanded, onToggleShell, onComplete, isCurrent 
             ) : null}
           </div>
         </div>
-        {step.done ? (
-          step.actionHref ? (
+        <div className="flex flex-shrink-0 gap-1.5">
+          {step.done && step.actionHref ? (
             <Link to={step.actionHref}>
               <Button variant="ghost" size="sm">
                 Manage
               </Button>
             </Link>
-          ) : null
-        ) : (
-          <div className="flex flex-shrink-0 gap-1.5">
-            {step.actionHref ? (
-              <Link to={step.actionHref}>
-                <Button variant="outline" size="sm">
-                  {actionLabelFor(step.id)}
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </Link>
-            ) : null}
-            {provider ? (
-              <Button variant="secondary" size="sm" onClick={onToggleShell}>
-                <Terminal className="mr-1 h-3.5 w-3.5" />
-                {shellLabelFor(step.id)}
-                {expanded ? (
-                  <ChevronDown className="ml-1 h-3 w-3" />
-                ) : (
-                  <ChevronRight className="ml-1 h-3 w-3" />
-                )}
+          ) : null}
+          {!step.done && step.actionHref ? (
+            <Link to={step.actionHref}>
+              <Button variant="outline" size="sm">
+                {actionLabelFor(step.id)}
+                <ArrowRight className="ml-1 h-3 w-3" />
               </Button>
-            ) : null}
-          </div>
-        )}
+            </Link>
+          ) : null}
+          {provider ? (
+            // Show the shell button regardless of step.done so the
+            // operator can re-run the OAuth flow at any time. Useful
+            // when the active claude account is rate-limited and the
+            // operator wants to log in again with a fresh account.
+            <Button variant="secondary" size="sm" onClick={onToggleShell}>
+              <Terminal className="mr-1 h-3.5 w-3.5" />
+              {step.done ? "Log in again" : shellLabelFor(step.id)}
+              {expanded ? (
+                <ChevronDown className="ml-1 h-3 w-3" />
+              ) : (
+                <ChevronRight className="ml-1 h-3 w-3" />
+              )}
+            </Button>
+          ) : null}
+        </div>
       </div>
       {expanded && provider ? (
         <div className="mt-3">
