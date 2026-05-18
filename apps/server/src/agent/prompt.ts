@@ -2,7 +2,14 @@ export type PromptInput = {
   title: string;
   stackTrace: string;
   suspectedFiles: string[];
-  testCommand: string;
+  /**
+   * The test command the gate will run after the agent finishes. May
+   * be null when the workspace has no detectable test setup (no
+   * package.json/pyproject.toml/pom.xml/etc); in that case the prompt
+   * still asks the agent to verify the fix manually but no hard gate
+   * runs.
+   */
+  testCommand: string | null;
   sentryIssueId?: string;
   sentryProject?: string;
   sentryOrgSlug?: string;
@@ -50,7 +57,7 @@ Your job:
    competing hypotheses, then pick one with evidence.
 2. Make the minimal code change that fixes the issue.
 3. Add a test that fails before the fix and passes after.
-4. Run \`${input.testCommand}\` and ensure it passes.
+4. ${testStep(input.testCommand)}
 5. When done, emit a structured summary in this EXACT shape so the PR
    description renders cleanly. Every tag is required — leave the body
    empty if a section truly does not apply:
@@ -77,7 +84,10 @@ hypothesis. List the files touched.
 
 Constraints:
 - Touch only files relevant to this fix.
-- Do not change package.json dependencies.
+- Do not bump dependency versions or change lockfiles (package.json,
+  pyproject.toml, pom.xml, go.mod, Cargo.toml, Gemfile, composer.json,
+  etc.). Surface dependency issues in <fix> instead so a human can
+  decide.
 - Do not commit secrets.
 - Keep the diff small.
 
@@ -87,4 +97,27 @@ STACK TRACE:
 ${input.stackTrace}
 
 ${filesHint}`;
+}
+
+/**
+ * The step-4 line of the prompt depends on whether a test command was
+ * detected. If yes, the gate will hard-block the PR on test failure,
+ * so the agent must run + pass it. If no, the agent should still
+ * sanity-check its fix but the worker won't enforce anything.
+ */
+function testStep(testCommand: string | null): string {
+  if (testCommand) {
+    return `**MANDATORY**: Run \`${testCommand}\` and confirm it exits 0
+   before you finish. If dependencies are missing, install them first
+   using the repo's package manager (npm/pnpm/yarn/poetry/pip/maven/
+   gradle/cargo/go mod/etc — pick the one matching the lockfile in
+   this repo). If the command fails, FIX it before stopping. The
+   CI/CD pipeline runs this exact command on merge; if it fails here,
+   the PR will not be opened.`;
+  }
+  return `No automated test command was detected in this repo (no
+   package.json/pyproject.toml/pom.xml/build.gradle/go.mod/Cargo.toml/
+   Gemfile/composer.json/Makefile with a test target). Verify your
+   fix manually against the stack trace and any related code paths.
+   The PR will still be opened but no gate will run.`;
 }

@@ -16,7 +16,12 @@ export const reposConfig = pgTable("repos_config", {
   sentryProject: text("sentry_project").notNull().unique(),
   github: text("github").notNull(),
   defaultBranch: text("default_branch").notNull(),
-  testCommand: text("test_command").notNull(),
+  // Optional. When null/empty, the agent worker auto-detects the test
+  // command from `package.json` (prefers `test:coverage`, falls back to
+  // `test`, skips the gate entirely if neither exists). Set this only
+  // to override the auto-detection — e.g. when the test command needs
+  // a prefix like `npm ci && npm run test:coverage`.
+  testCommand: text("test_command"),
   prReviewers: jsonb("pr_reviewers").$type<string[]>().notNull().default([]),
   dailyTokenCap: integer("daily_token_cap").notNull(),
   dailyCostCapCents: integer("daily_cost_cap_cents").notNull(),

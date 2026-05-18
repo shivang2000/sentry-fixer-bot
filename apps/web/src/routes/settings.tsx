@@ -10,7 +10,7 @@ import { Input } from "@sentry-fixer-bot/ui/components/input";
 import { Label } from "@sentry-fixer-bot/ui/components/label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, KeyRound, LogIn, X } from "lucide-react";
+import { Check, KeyRound, LogIn, Trash2, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -102,6 +102,8 @@ function SettingsPage() {
       </header>
 
       <CloudLogins />
+
+      <InvitesCard />
 
       {GROUPS.map((group) => (
         <Card key={group.title}>
@@ -219,6 +221,151 @@ function CloudLogins() {
         {active ? (
           <InlineLoginSession key={active} provider={active} onCancel={() => setActive(null)} />
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Admin-only invites surface. Replaces the "ssh in and run psql" path.
+ *
+ * The signup gate in packages/auth/src/index.ts allows the first real
+ * user (excluding the synthetic `local-board` bootstrap account) to
+ * sign up unconditionally and become `instance_admin`. After that,
+ * every additional account requires a row in `invites` with a matching
+ * email. This panel is how the admin creates those rows.
+ */
+function InvitesCard() {
+  const qc = useQueryClient();
+  const list = useQuery(trpc.invites.list.queryOptions());
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"member" | "instance_admin">("member");
+
+  const create = useMutation(
+    trpc.invites.create.mutationOptions({
+      onSuccess: () => {
+        toast.success(`Invite sent for ${email}`);
+        setEmail("");
+        setRole("member");
+        qc.invalidateQueries({ queryKey: trpc.invites.list.queryKey() });
+      },
+      onError: (err) => toast.error(err.message),
+    }),
+  );
+  const revoke = useMutation(
+    trpc.invites.revoke.mutationOptions({
+      onSuccess: () => {
+        toast.success("Invite revoked");
+        qc.invalidateQueries({ queryKey: trpc.invites.list.queryKey() });
+      },
+      onError: (err) => toast.error(err.message),
+    }),
+  );
+
+  const rows = list.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserPlus className="h-4 w-4" /> Invites
+        </CardTitle>
+        <CardDescription>
+          Sign-up is open for the first real user (who auto-becomes admin). After that, every new
+          account needs a matching invite row. Add invites here instead of running <code>psql</code>
+          .
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Label htmlFor="invite-email" className="text-xs">
+              Email
+            </Label>
+            <Input
+              id="invite-email"
+              type="email"
+              placeholder="teammate@your-company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="invite-role" className="text-xs">
+              Role
+            </Label>
+            <select
+              id="invite-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as "member" | "instance_admin")}
+              className="mt-1 h-9 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm"
+            >
+              <option value="member">member</option>
+              <option value="instance_admin">instance_admin</option>
+            </select>
+          </div>
+          <Button
+            disabled={!email.trim() || create.isPending}
+            onClick={() => create.mutate({ email: email.trim().toLowerCase(), role })}
+          >
+            {create.isPending ? "Adding…" : "Add invite"}
+          </Button>
+        </div>
+
+        {list.isLoading ? (
+          <p className="text-sm text-zinc-500">Loading invites…</p>
+        ) : rows.length === 0 ? (
+          <p className="rounded-md border border-dashed p-4 text-center text-xs text-zinc-500">
+            No invites yet. Add one above to onboard a teammate.
+          </p>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-zinc-500">
+                <th className="py-1.5">Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-zinc-800 border-t">
+                  <td className="py-1.5 font-mono">{r.email}</td>
+                  <td>{r.role}</td>
+                  <td>
+                    {r.consumedAt ? (
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+                        accepted
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">
+                        pending
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap text-zinc-500">
+                    {new Date(r.createdAt).toLocaleString()}
+                  </td>
+                  <td className="text-right">
+                    {r.consumedAt ? null : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={revoke.isPending && revoke.variables?.id === r.id}
+                        onClick={() => revoke.mutate({ id: r.id })}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </CardContent>
     </Card>
   );

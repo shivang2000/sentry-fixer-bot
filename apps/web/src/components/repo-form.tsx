@@ -23,7 +23,9 @@ const FormSchema = z.object({
   sentryProject: z.string().min(1, "Required"),
   github: z.string().regex(/^[^/]+\/[^/]+$/, "Expected owner/name"),
   defaultBranch: z.string().min(1, "Required"),
-  testCommand: z.string().min(1, "Required"),
+  // Optional. Empty → server auto-detects from the repo's tooling
+  // markers (package.json, pyproject.toml, pom.xml, etc).
+  testCommand: z.string(),
   prReviewersCsv: z.string(),
   dailyTokenCap: z.number().int().positive("Must be > 0"),
   dailyCostCapDollars: z.number().positive("Must be > 0"),
@@ -50,7 +52,7 @@ const EMPTY_DEFAULTS: FormValues = {
   sentryProject: "",
   github: "",
   defaultBranch: "main",
-  testCommand: "bun test",
+  testCommand: "",
   prReviewersCsv: "",
   dailyTokenCap: 1_000_000,
   dailyCostCapDollars: 25,
@@ -185,14 +187,19 @@ export function RepoForm({ mode, initial, onSuccess, onCancel }: Props) {
         <form.Field name="testCommand">
           {(field) => (
             <div className="space-y-1.5">
-              <Label htmlFor={field.name}>Test command</Label>
+              <Label htmlFor={field.name}>Test command (optional)</Label>
               <Input
                 id={field.name}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
-                placeholder="bun test"
+                placeholder="auto-detect from package.json / pom.xml / pyproject.toml / …"
               />
+              <p className="text-[11px] text-zinc-500">
+                Leave blank to auto-detect. Override only if your CI uses a non-standard command,
+                e.g.{" "}
+                <code className="rounded bg-zinc-800 px-1">npm ci && npm run test:coverage</code>.
+              </p>
               <FieldErrors errors={field.state.meta.errors} />
             </div>
           )}

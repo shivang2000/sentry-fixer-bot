@@ -116,10 +116,13 @@ async function main(): Promise<void> {
   // set so the dropdowns reflect actual values.
   await ensureDefaultSchedule(JOB_SENTRY_POLL, "*/15 * * * *", { lookbackMinutes: 15 });
   await ensureDefaultSchedule(JOB_HEALTH_CHECK, "*/15 * * * *");
-  // PR comment poll runs every 15m as a fallback for when the GitHub
+  // PR comment poll runs every 5m as a fallback for when the GitHub
   // webhook is not configured (no GITHUB_WEBHOOK_SECRET) or webhook
-  // delivery dropped a payload. Idempotent via lastReviewedCommentAt.
-  await ensureDefaultSchedule(JOB_PR_COMMENT_POLL, "*/15 * * * *");
+  // delivery dropped a payload. Five minutes is the worst-case
+  // reviewer wait time before a `/sfb` lands; idempotent via
+  // lastReviewedCommentAt so duplicate webhook+cron deliveries are
+  // safe.
+  await ensureDefaultSchedule(JOB_PR_COMMENT_POLL, "*/5 * * * *");
 
   log.info("worker ready");
 }

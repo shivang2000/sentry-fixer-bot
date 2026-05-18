@@ -5,10 +5,14 @@ import { eq } from "drizzle-orm";
 import { renderClaudeHome } from "../agent/render-claude-home";
 import { spawnClaudeAgent } from "../agent/spawn";
 import { attachWorkspace } from "../agent/workspace";
+import { resolveTestCommand } from "../gate/detect-test-command";
+import { runRepoTests } from "../gate/run-tests";
 import { resolveGithubToken } from "../github/auth";
 import { commentOnPr, markPrReady } from "../github/pr-ops";
 import { log } from "../log";
 import type { PrFollowupJob } from "../queue/jobs";
+
+const MAX_FOLLOWUP_ATTEMPTS = 3;
 
 /**
  * Process a `/sfb <instruction>` comment on a PR the bot opened.
@@ -67,25 +71,78 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
 
   try {
     const instruction = stripSfbPrefix(job.commentBody);
-    const prompt = renderFollowupPrompt({
+    const resolvedTest = await resolveTestCommand({
+      cwd: ws.dir,
+      override: cfg.testCommand ?? null,
+    });
+    const basePrompt = renderFollowupPrompt({
       alertTitle: alert?.title ?? "(unknown)",
       reviewer: job.commentAuthor,
       instruction,
-      testCommand: cfg.testCommand,
+      testCommand: resolvedTest?.command ?? null,
     });
 
     const { mcpConfigPath } = await renderClaudeHome({ repo: pr.repo, runDir: ws.dir });
-    const res = await spawnClaudeAgent({ cwd: ws.dir, prompt, mcpConfigPath });
-    log.info(
-      { exit: res.exitCode, ms: res.durationMs, prId: pr.id },
-      "[pr-followup] claude returned",
-    );
 
-    if (res.exitCode !== 0) {
+    // Same retry loop as the primary agent path. /sfb-driven changes
+    // are still gated on the test command — pushing broken tests would
+    // be worse than the original blocker the reviewer was trying to
+    // fix. Up to MAX_FOLLOWUP_ATTEMPTS attempts; on each retry the
+    // failing test output is appended to the prompt so claude can
+    // diagnose.
+    let agentExit = 0;
+    let lastTestStdout = "";
+    let lastTestStderr = "";
+    let testPassed: boolean | null = null;
+
+    for (let attempt = 1; attempt <= MAX_FOLLOWUP_ATTEMPTS; attempt++) {
+      const promptForAttempt =
+        attempt === 1
+          ? basePrompt
+          : `${basePrompt}\n\n---\n\n<previous-attempt>\nYour previous attempt to apply the reviewer's instruction has been\nwritten to the worktree, but \`${resolvedTest?.command}\` is still\nfailing. This is attempt ${attempt}/${MAX_FOLLOWUP_ATTEMPTS}; if you\ncannot make the tests pass, the changes will NOT be pushed.\n\nDiagnose from the output below and apply the smallest fix that turns\nthe suite green. Do not revert your earlier diff unless it was the\ncause.\n\nTEST STDOUT (tail):\n${lastTestStdout.slice(-3000) || "(empty)"}\n\nTEST STDERR (tail):\n${lastTestStderr.slice(-3000) || "(empty)"}\n</previous-attempt>\n`;
+
+      const res = await spawnClaudeAgent({
+        cwd: ws.dir,
+        prompt: promptForAttempt,
+        mcpConfigPath,
+      });
+      agentExit = res.exitCode;
+      log.info(
+        { exit: res.exitCode, ms: res.durationMs, prId: pr.id, attempt },
+        "[pr-followup] claude attempt",
+      );
+
+      if (res.exitCode !== 0) break;
+
+      if (!resolvedTest) {
+        // No test gate configured for this repo → push whatever
+        // claude produced.
+        testPassed = null;
+        break;
+      }
+
+      const testRes = await runRepoTests({ cwd: ws.dir, testCommand: resolvedTest.command });
+      testPassed = testRes.passed;
+      lastTestStdout = testRes.stdout;
+      lastTestStderr = testRes.stderr;
+      if (testRes.passed) break;
+    }
+
+    if (agentExit !== 0) {
       await commentOnPr({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🤖 sentry-fixer-bot: tried to apply \`${instruction.slice(0, 120)}\` but the agent exited ${res.exitCode}. Comment again with a refined \`/sfb\` instruction or push fixes manually.`,
+        body: `🤖 sentry-fixer-bot: tried to apply \`${instruction.slice(0, 120)}\` but the agent exited ${agentExit}. Comment again with a refined \`/sfb\` instruction or push fixes manually.`,
+      });
+      await advanceWatermark(pr.id, job.commentCreatedAt, "waiting_human");
+      return;
+    }
+
+    if (resolvedTest && testPassed === false) {
+      await commentOnPr({
+        repo: pr.repo,
+        prNumber: pr.number,
+        body: `🛑 sentry-fixer-bot: ran your \`/sfb\` instruction and tried ${MAX_FOLLOWUP_ATTEMPTS} attempts to make \`${resolvedTest.command}\` pass, but tests are still failing. Not pushing. Tail of stderr:\n\n\`\`\`\n${lastTestStderr.slice(-1500)}\n\`\`\``,
       });
       await advanceWatermark(pr.id, job.commentCreatedAt, "waiting_human");
       return;
@@ -154,8 +211,11 @@ function renderFollowupPrompt(input: {
   alertTitle: string;
   reviewer: string;
   instruction: string;
-  testCommand: string;
+  testCommand: string | null;
 }): string {
+  const testStep = input.testCommand
+    ? `- Run \`${input.testCommand}\` and make sure it still passes. The worker will re-run this command; if it fails, the change will NOT be pushed.`
+    : "- No automated test command was detected in this repo; verify your change manually against the reviewer's intent.";
   return `/sentry-cli
 
 You are a software engineer responding to a human reviewer's feedback
@@ -170,7 +230,7 @@ ${input.instruction || "(empty — apply your earlier review's suggestions exact
 
 Constraints:
 - Only change what the reviewer asked for. Do not rewrite unrelated code.
-- Run \`${input.testCommand}\` and make sure it still passes.
+${testStep}
 - Add or update tests if the instruction implies new behaviour.
 - Do not commit secrets.
 - Keep the diff small and focused.

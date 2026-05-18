@@ -12,6 +12,7 @@ import { spawnClaudeAgent } from "../agent/spawn";
 import { createWorkspace } from "../agent/workspace";
 import { findAlertById } from "../alerts/persist";
 import { checkRepoBudget, recordUsage } from "../budget/enforce";
+import { resolveTestCommand } from "../gate/detect-test-command";
 import { runRepoTests } from "../gate/run-tests";
 import { openPr } from "../github/pr";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
@@ -70,11 +71,29 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
   });
 
   try {
+    // Resolve test command up-front so the agent's prompt can include
+    // the exact command we'll gate on later. `cfg.testCommand` is an
+    // override; otherwise we inspect the worktree's package.json. If
+    // neither yields a command, the gate is skipped and the prompt
+    // tells the agent there are no tests to run.
+    const resolvedTest = await resolveTestCommand({
+      cwd: ws.dir,
+      override: cfg.testCommand ?? null,
+    });
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "tests",
+      message: resolvedTest
+        ? `Test command (${resolvedTest.source}): ${resolvedTest.command}`
+        : "No test command found (no override + no test:coverage/test script). Skipping test gate.",
+    });
+
     const prompt = renderAgentPrompt({
       title: alert.title,
       stackTrace: run.stackTrace ?? "",
       suspectedFiles: run.suspectedFiles ?? [],
-      testCommand: cfg.testCommand,
+      testCommand: resolvedTest?.command ?? null,
       sentryIssueId: alert.sentryIssueId,
       sentryProject: alert.sentryProject,
       sentryOrgSlug: process.env.SENTRY_ORG_SLUG,
@@ -82,55 +101,132 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
     });
 
     const { mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });
-    await appendRunLog({
-      runId: payload.runId,
-      level: "info",
-      source: "agent",
-      message: `Spawning claude (model=sonnet, effort=high) in ${ws.dir}…`,
-    });
-    // Intentionally no `home` override — claude reads creds from
-    // /sfb/state/home/.claude/.credentials.json (set by `claude auth
-    // login` in the wizard). Per-run claude-home directory is empty;
-    // pointing HOME there guarantees an exit-1 "not authenticated".
-    // MCP config still flows via --mcp-config to the absolute path.
-    const agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt, mcpConfigPath });
-    await appendRunLog({
-      runId: payload.runId,
-      level: agentRes.exitCode === 0 ? "info" : "error",
-      source: "agent",
-      message: `claude exit ${agentRes.exitCode} in ${(agentRes.durationMs / 1000).toFixed(1)}s`,
-    });
-    if (agentRes.stdout) {
+
+    // Self-heal loop: spawn the agent, run the test gate, and if the
+    // gate fails (and there's a gate to fail), re-spawn the agent with
+    // the failure output appended so it can iterate. Bounded to keep
+    // runaway runs from chewing token budget — three attempts has been
+    // the empirical sweet spot in other agentic systems for "fix what
+    // you broke" without turning into an infinite loop on genuinely
+    // hard test failures.
+    const MAX_AGENT_ATTEMPTS = 3;
+    let agentRes = { exitCode: 0, stdout: "", stderr: "", durationMs: 0 };
+    let testPassed: boolean | null = null;
+    let lastTestStdout = "";
+    let lastTestStderr = "";
+
+    for (let attempt = 1; attempt <= MAX_AGENT_ATTEMPTS; attempt++) {
+      const isRetry = attempt > 1;
+      const attemptPrompt = isRetry
+        ? renderRetryPrompt({
+            originalPrompt: prompt,
+            testCommand: resolvedTest?.command ?? "",
+            testStdoutTail: lastTestStdout.slice(-3000),
+            testStderrTail: lastTestStderr.slice(-3000),
+            attempt,
+            maxAttempts: MAX_AGENT_ATTEMPTS,
+          })
+        : prompt;
+
       await appendRunLog({
         runId: payload.runId,
-        level: "debug",
+        level: "info",
         source: "agent",
-        message: agentRes.stdout.slice(-4000),
+        message: isRetry
+          ? `Retry attempt ${attempt}/${MAX_AGENT_ATTEMPTS}: re-spawning claude with failing-test context…`
+          : `Spawning claude (model=sonnet, effort=high) in ${ws.dir}…`,
       });
-    }
-    if (agentRes.stderr) {
+      agentRes = await spawnClaudeAgent({ cwd: ws.dir, prompt: attemptPrompt, mcpConfigPath });
       await appendRunLog({
         runId: payload.runId,
-        level: agentRes.exitCode === 0 ? "debug" : "error",
-        source: "claude-stderr",
-        message: agentRes.stderr.slice(-4000),
+        level: agentRes.exitCode === 0 ? "info" : "error",
+        source: "agent",
+        message: `claude exit ${agentRes.exitCode} in ${(agentRes.durationMs / 1000).toFixed(1)}s (attempt ${attempt})`,
       });
+      if (agentRes.stdout) {
+        await appendRunLog({
+          runId: payload.runId,
+          level: "debug",
+          source: "agent",
+          message: agentRes.stdout.slice(-4000),
+        });
+      }
+      if (agentRes.stderr) {
+        await appendRunLog({
+          runId: payload.runId,
+          level: agentRes.exitCode === 0 ? "debug" : "error",
+          source: "claude-stderr",
+          message: agentRes.stderr.slice(-4000),
+        });
+      }
+
+      // Hard fail on the agent itself — no point retrying a broken
+      // tool. Operator must re-trigger after fixing claude.
+      if (agentRes.exitCode !== 0) break;
+
+      // No test gate configured for this repo → nothing to verify;
+      // succeed and move on.
+      if (!resolvedTest) {
+        testPassed = null;
+        break;
+      }
+
+      await appendRunLog({
+        runId: payload.runId,
+        level: "info",
+        source: "tests",
+        message: `Running \`${resolvedTest.command}\` (${resolvedTest.source}${resolvedTest.ecosystem ? ` / ${resolvedTest.ecosystem}` : ""}), attempt ${attempt}…`,
+      });
+      const testRes = await runRepoTests({ cwd: ws.dir, testCommand: resolvedTest.command });
+      testPassed = testRes.passed;
+      lastTestStdout = testRes.stdout;
+      lastTestStderr = testRes.stderr;
+      await appendRunLog({
+        runId: payload.runId,
+        level: testRes.passed ? "info" : "warn",
+        source: "tests",
+        message: testRes.passed
+          ? `Tests passed on attempt ${attempt}.`
+          : attempt < MAX_AGENT_ATTEMPTS
+            ? `Tests failed on attempt ${attempt}. Will retry.`
+            : `Tests failed on attempt ${attempt} (final). PR will not be opened.`,
+      });
+      if (testRes.stdout) {
+        await appendRunLog({
+          runId: payload.runId,
+          level: "debug",
+          source: "tests-stdout",
+          message: testRes.stdout.slice(-4000),
+        });
+      }
+      if (testRes.stderr) {
+        await appendRunLog({
+          runId: payload.runId,
+          level: testRes.passed ? "debug" : "error",
+          source: "tests-stderr",
+          message: testRes.stderr.slice(-4000),
+        });
+      }
+
+      if (testRes.passed) break;
+      // else: loop tail → next iteration will build a retry prompt
+      // from the just-captured stdout/stderr.
     }
+
     const outcome = parseAgentOutput(agentRes.stdout);
 
-    // Secret scan of the diff
+    // Secret scan of the diff (after the loop — only the final state
+    // matters; intermediate scans would be noise).
     const findings = await scanWorkspace(ws.dir);
 
-    // Run repo tests
-    const testRes = await runRepoTests({ cwd: ws.dir, testCommand: cfg.testCommand });
-    const isDraft = !testRes.passed || findings.length > 0;
-    const needsHuman = isDraft;
+    const needsHuman = findings.length > 0;
+    const isDraft = findings.length > 0;
 
     await updateRun(payload.runId, {
       agentSummary: outcome.summary,
       agentConfidence: outcome.confidence,
       agentRisk: outcome.risk,
-      testPassed: testRes.passed,
+      testPassed,
     });
 
     // claude bailed mid-flight (auth, transient API, hit token cap).
@@ -145,6 +241,18 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
         message: "claude exited non-zero; skipping PR open.",
       });
       await updateRun(payload.runId, { status: "agent_error", endedAt: new Date() });
+      return;
+    }
+
+    // Tests must pass when we have a command to run them. Repos without
+    // any detected test setup skip this entirely — see the comment on
+    // the gate above for the rationale.
+    if (resolvedTest && testPassed === false) {
+      await postIssueComment(
+        alert.sentryIssueId,
+        `sentry-fixer-bot: agent produced a fix but \`${resolvedTest.command}\` failed. No PR opened. See /runs/${payload.runId} for the test output.`,
+      );
+      await updateRun(payload.runId, { status: "test_failed", endedAt: new Date() });
       return;
     }
 
@@ -174,7 +282,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       confidence: outcome.confidence,
       risk: outcome.risk,
       severity: outcome.severity,
-      testPassed: testRes.passed,
+      testPassed,
       findings,
     });
 
@@ -269,13 +377,11 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       message: `PR opened: ${pr.url}${finalIsDraft ? " (draft)" : ""}`,
     });
     await postIssueComment(alert.sentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
+    // testPassed is either true (gate ran + passed) or null (no tests
+    // detected and gate skipped). The `false` case returned earlier in
+    // the test-failed branch, so we don't need to handle it here.
     await updateRun(payload.runId, {
-      status:
-        review.verdict === "blocker"
-          ? "pr_opened_needs_human"
-          : testRes.passed
-            ? "pr_opened"
-            : "pr_opened_needs_human",
+      status: review.verdict === "blocker" ? "pr_opened_needs_human" : "pr_opened",
       endedAt: new Date(),
     });
 
@@ -330,6 +436,50 @@ async function scanWorkspace(dir: string): Promise<SecretFinding[]> {
 }
 
 /**
+ * Build the prompt for a retry attempt after the test gate failed.
+ *
+ * The original prompt is included verbatim (so the agent still has the
+ * stack trace + structured-summary requirements + skill prefix) plus a
+ * `<previous-attempt>` block carrying the failing stdout/stderr tail.
+ * The agent is told explicitly to fix what it just shipped, not start
+ * over from scratch — the worktree already has its previous diff
+ * applied, so a fresh re-analysis would be wasteful and could revert
+ * useful work.
+ */
+function renderRetryPrompt(input: {
+  originalPrompt: string;
+  testCommand: string;
+  testStdoutTail: string;
+  testStderrTail: string;
+  attempt: number;
+  maxAttempts: number;
+}): string {
+  return `${input.originalPrompt}
+
+---
+
+<previous-attempt>
+Your previous fix attempt has already been applied to the working
+copy, but the test gate (\`${input.testCommand}\`) is still failing.
+This is attempt ${input.attempt}/${input.maxAttempts}; if you cannot
+make the tests pass on this attempt, the PR will NOT be opened.
+
+Diagnose the failure from the output below, then apply the smallest
+change that turns the suite green. Do not revert your earlier diff
+unless it was clearly the cause — prefer fixing forward. Re-run
+\`${input.testCommand}\` yourself before finishing this attempt to
+confirm the gate will pass.
+
+TEST STDOUT (tail):
+${input.testStdoutTail || "(empty)"}
+
+TEST STDERR (tail):
+${input.testStderrTail || "(empty)"}
+</previous-attempt>
+`;
+}
+
+/**
  * Wrap the reviewer's raw output in a comment shell that:
  *  - badges the verdict at the top so humans can scan a list of PRs
  *    and tell blocker-comments apart from nit-comments,
@@ -368,7 +518,7 @@ function renderPrBody(input: {
   confidence: string;
   risk: string;
   severity: string;
-  testPassed: boolean;
+  testPassed: boolean | null;
   findings: SecretFinding[];
 }): string {
   const lines: string[] = [];
@@ -379,7 +529,15 @@ function renderPrBody(input: {
   lines.push(`- Confidence: \`${input.confidence}\``);
   lines.push(`- Risk: \`${input.risk}\``);
   lines.push(`- Severity: \`${input.severity}\``);
-  lines.push(`- Tests: ${input.testPassed ? "✅ pass" : "❌ fail (draft)"}`);
+  lines.push(
+    `- Tests: ${
+      input.testPassed === true
+        ? "✅ pass"
+        : input.testPassed === false
+          ? "❌ fail"
+          : "⚪ no test command detected — verify manually"
+    }`,
+  );
   if (input.findings.length > 0) {
     lines.push(`- ⚠️ Secret-scan findings: ${input.findings.length}`);
     lines.push("");

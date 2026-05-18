@@ -52,7 +52,7 @@ function EditRepoPage() {
           sentryProject: q.data.sentryProject,
           github: q.data.github,
           defaultBranch: q.data.defaultBranch,
-          testCommand: q.data.testCommand,
+          testCommand: q.data.testCommand ?? "",
           prReviewers: (q.data.prReviewers as string[]) ?? [],
           dailyTokenCap: q.data.dailyTokenCap,
           dailyCostCapCents: q.data.dailyCostCapCents,

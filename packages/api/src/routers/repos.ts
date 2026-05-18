@@ -10,7 +10,13 @@ const Input = z.object({
   sentryProject: z.string().min(1),
   github: z.string().regex(/^[^/]+\/[^/]+$/, "expected owner/name"),
   defaultBranch: z.string().min(1).default("main"),
-  testCommand: z.string().min(1),
+  // Optional. Empty/undefined → agent worker auto-detects from the
+  // repo's package.json (prefers `test:coverage`, falls back to `test`,
+  // skips the gate if neither exists).
+  testCommand: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : null)),
   prReviewers: z.array(z.string()).default([]),
   dailyTokenCap: z.number().int().positive(),
   dailyCostCapCents: z.number().int().positive(),

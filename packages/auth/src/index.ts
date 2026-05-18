@@ -4,7 +4,8 @@ import { invites } from "@sentry-fixer-bot/db/schema/invites";
 import { env } from "@sentry-fixer-bot/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { LOCAL_BOARD_ID } from "./bootstrap-logic";
 import { resolveTrustedOrigins } from "./trusted-origins";
 
 function inferPort(urlString: string, fallback: number): number {
@@ -51,13 +52,22 @@ export function createAuth() {
     databaseHooks: {
       user: {
         create: {
-          // Gate: allow if no users yet, or email matches bootstrap admin,
-          // or there's an unconsumed invite for this email.
+          // Gate: allow if no real users yet, or email matches bootstrap
+          // admin, or there's an unconsumed invite for this email.
+          //
+          // We exclude the `local-board` synthetic admin (seeded in
+          // local_trusted mode) from the "real users" count so a fresh
+          // operator can sign up and become admin without `psql`. The
+          // local-board user is not a person; it's a service account
+          // for the loopback dev mode.
           before: async (newUser) => {
-            const rows = await db.select({ count: sql<number>`count(*)::int` }).from(schema.user);
+            const rows = await db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(schema.user)
+              .where(ne(schema.user.id, LOCAL_BOARD_ID));
             const total = rows[0]?.count ?? 0;
 
-            if (total === 0) return; // first signup → allowed (promoted in `after`)
+            if (total === 0) return; // first real signup → allowed (promoted in `after`)
             if (env.SFB_BOOTSTRAP_ADMIN_EMAIL && env.SFB_BOOTSTRAP_ADMIN_EMAIL === newUser.email) {
               return;
             }
@@ -70,9 +80,13 @@ export function createAuth() {
               throw new Error("signup_requires_invite");
             }
           },
-          // Post-create: first user becomes instance_admin; otherwise consume invite.
+          // Post-create: first real user becomes instance_admin; others
+          // consume their invite (and inherit its role).
           after: async (createdUser) => {
-            const rows = await db.select({ count: sql<number>`count(*)::int` }).from(schema.user);
+            const rows = await db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(schema.user)
+              .where(ne(schema.user.id, LOCAL_BOARD_ID));
             const total = rows[0]?.count ?? 0;
 
             if (total === 1) {

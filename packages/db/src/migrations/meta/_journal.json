@@ -43,6 +43,13 @@
       "when": 1779061801804,
       "tag": "0005_loving_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779065104940,
+      "tag": "0006_goofy_golden_guardian",
+      "breakpoints": true
     }
   ]
 }

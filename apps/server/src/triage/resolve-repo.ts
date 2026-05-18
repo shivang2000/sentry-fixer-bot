@@ -70,7 +70,7 @@ export async function resolveOrCreateRepoConfig(sentryProject: string): Promise<
   id: string;
   github: string;
   defaultBranch: string;
-  testCommand: string;
+  testCommand: string | null;
   prReviewers: string[];
   minSeverityToFix: string;
   dailyTokenCap: number;
@@ -87,7 +87,12 @@ export async function resolveOrCreateRepoConfig(sentryProject: string): Promise<
       sentryProject,
       github: hit.nameWithOwner,
       defaultBranch: hit.defaultBranch,
-      testCommand: "echo 'no tests configured'",
+      // Leave testCommand null; the agent worker auto-detects from the
+      // worktree (package.json / pyproject.toml / pom.xml / build.gradle
+      // / go.mod / Cargo.toml / Gemfile / composer.json / Makefile) and
+      // skips the gate if nothing's there. Operator can still override
+      // via /repos/<id>.
+      testCommand: null,
       prReviewers: [],
       dailyTokenCap: 1_000_000,
       dailyCostCapCents: 500,

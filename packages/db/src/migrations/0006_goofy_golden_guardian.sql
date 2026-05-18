@@ -1,0 +1,1 @@
+ALTER TABLE "repos_config" ALTER COLUMN "test_command" DROP NOT NULL;
