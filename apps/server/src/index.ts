@@ -14,6 +14,7 @@ import { cors } from "hono/cors";
 import { bootstrapDefaults } from "./bootstrap-defaults";
 import { boardClaim } from "./routes/board-claim";
 import { chatWs, websocket } from "./routes/chat-ws";
+import { githubWebhook } from "./routes/github-webhook";
 import { health } from "./routes/health";
 import { sentryWebhook } from "./routes/sentry-webhook";
 
@@ -62,6 +63,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route("/", health);
 app.route("/", boardClaim);
 app.route("/", sentryWebhook);
+app.route("/", githubWebhook);
 app.route("/", chatWs);
 
 app.use(

@@ -33,6 +33,12 @@ export const env = createEnv({
     GITHUB_APP_ID: z.string().min(1).optional(),
     GITHUB_APP_PRIVATE_KEY_PATH: z.string().min(1).optional(),
     GITHUB_APP_INSTALLATION_ID: z.string().min(1).optional(),
+    // Optional. When set, the /webhooks/github endpoint verifies the
+    // X-Hub-Signature-256 header on incoming issue_comment events so
+    // /sfb commands on PRs can drive the follow-up loop in real-time.
+    // Unset → endpoint returns 503 and the cron fallback is the only
+    // way comments get processed.
+    GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
 
     // --- Agent runtime ---
     WORK_DIR: z.string().min(1).default("/var/lib/sfb/work"),

@@ -14,8 +14,10 @@ import { findAlertById } from "../alerts/persist";
 import { checkRepoBudget, recordUsage } from "../budget/enforce";
 import { runRepoTests } from "../gate/run-tests";
 import { openPr } from "../github/pr";
+import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
 import { log } from "../log";
 import type { AgentJob } from "../queue/jobs";
+import { runReviewer } from "../review/reviewer";
 import { appendRunLog } from "../runs/log";
 import { findRunById, updateRun } from "../runs/persist";
 import { postIssueComment } from "../sentry/comment";
@@ -187,25 +189,93 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       reviewers: cfg.prReviewers,
     });
 
+    // Phase A — automated code-review pass. A second claude reviews the
+    // diff with an adversarial reviewer persona, posts findings as a PR
+    // comment, and flips the PR to draft when it finds a `blocker` so
+    // the bot doesn't pretend the work is ready when it isn't.
+    //
+    // Failure-mode: reviewer crashes or returns unknown verdict —
+    // treated as advisory; PR stays in whatever draft state the test
+    // gate decided. We never want the reviewer to be a blocking
+    // dependency on opening the PR (the PR already exists at this
+    // point).
+    await appendRunLog({
+      runId: payload.runId,
+      level: "info",
+      source: "reviewer",
+      message: "Running automated code review pass…",
+    });
+    const review = await runReviewer({
+      cwd: ws.dir,
+      repo: payload.repo,
+      baseBranch: cfg.defaultBranch,
+      alertTitle: alert.title,
+      agentSummary: outcome.summary,
+    });
+    await appendRunLog({
+      runId: payload.runId,
+      level: review.verdict === "blocker" ? "warn" : "info",
+      source: "reviewer",
+      message: `Review verdict=${review.verdict} (exit ${review.exitCode}, ${(review.durationMs / 1000).toFixed(1)}s)`,
+    });
+
+    let finalIsDraft = isDraft;
+    let humanReviewState: "none" | "waiting_human" = "none";
+    if (review.verdict === "blocker") {
+      humanReviewState = "waiting_human";
+      if (!isDraft) {
+        const dExit = await convertPrToDraft({ repo: payload.repo, prNumber: pr.number });
+        finalIsDraft = dExit === 0;
+        await appendRunLog({
+          runId: payload.runId,
+          level: dExit === 0 ? "info" : "warn",
+          source: "reviewer",
+          message:
+            dExit === 0
+              ? "Reviewer found blocker — PR converted to draft."
+              : `Failed to convert PR to draft (gh exit ${dExit}); leaving as-is.`,
+        });
+      } else {
+        await appendRunLog({
+          runId: payload.runId,
+          level: "info",
+          source: "reviewer",
+          message: "Reviewer found blocker — PR already draft.",
+        });
+      }
+    }
+
+    // Post the review as a PR comment regardless of verdict, so the
+    // human reviewer can see why the bot did (or didn't) flip to draft.
+    // Adds a /sfb help footer so reviewers know how to reply.
+    const reviewComment = renderReviewComment(review.verdict, review.body);
+    await commentOnPr({ repo: payload.repo, prNumber: pr.number, body: reviewComment });
+
     await db.insert(prs).values({
       alertId: alert.id,
       runId: payload.runId,
       repo: payload.repo,
       number: pr.number,
       url: pr.url,
-      isDraft,
-      needsHuman,
+      isDraft: finalIsDraft,
+      needsHuman: needsHuman || review.verdict === "blocker",
+      humanReviewState,
     });
 
     await appendRunLog({
       runId: payload.runId,
       level: "info",
       source: "agent",
-      message: `PR opened: ${pr.url}${isDraft ? " (draft)" : ""}`,
+      message: `PR opened: ${pr.url}${finalIsDraft ? " (draft)" : ""}`,
     });
     await postIssueComment(alert.sentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
     await updateRun(payload.runId, {
-      status: testRes.passed ? "pr_opened" : "pr_opened_needs_human",
+      status:
+        review.verdict === "blocker"
+          ? "pr_opened_needs_human"
+          : testRes.passed
+            ? "pr_opened"
+            : "pr_opened_needs_human",
       endedAt: new Date(),
     });
 
@@ -257,6 +327,36 @@ async function scanWorkspace(dir: string): Promise<SecretFinding[]> {
     }
   }
   return findings;
+}
+
+/**
+ * Wrap the reviewer's raw output in a comment shell that:
+ *  - badges the verdict at the top so humans can scan a list of PRs
+ *    and tell blocker-comments apart from nit-comments,
+ *  - documents the /sfb commands the human reviewer can use to talk
+ *    back to the bot (Phase B follow-up loop).
+ */
+function renderReviewComment(verdict: string, body: string): string {
+  const badge =
+    verdict === "blocker"
+      ? "🛑 **Automated review: BLOCKER**"
+      : verdict === "nit"
+        ? "💬 **Automated review: nits**"
+        : verdict === "approve"
+          ? "✅ **Automated review: approved**"
+          : "ℹ️ **Automated review**";
+
+  const helpFooter = [
+    "",
+    "---",
+    "",
+    "_To respond to this review, comment with one of:_",
+    "- `/sfb apply` — apply the suggested fixes and push back to this branch.",
+    "- `/sfb <free-form instruction>` — e.g. `/sfb only fix the security issue, ignore the style nit`.",
+    "_Comments without the `/sfb` prefix are treated as human-to-human chatter and ignored by the bot._",
+  ].join("\n");
+
+  return `${badge}\n\n${body}${helpFooter}`;
 }
 
 function renderPrBody(input: {

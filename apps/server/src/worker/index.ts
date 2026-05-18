@@ -12,13 +12,19 @@ import {
   type HealthCheckJob,
   JOB_AGENT,
   JOB_HEALTH_CHECK,
+  JOB_PR_COMMENT_POLL,
+  JOB_PR_FOLLOWUP,
   JOB_SENTRY_POLL,
   JOB_TRIAGE,
+  type PrCommentPollJob,
+  type PrFollowupJob,
   type SentryPollJob,
   type TriageJob,
 } from "../queue/jobs";
 import { processAgentJob } from "./agent-job";
 import { processHealthCheckJob } from "./health-check-job";
+import { processPrCommentPollJob } from "./pr-comment-poll-job";
+import { processPrFollowupJob } from "./pr-followup-job";
 import { processSentryPollJob } from "./sentry-poll-job";
 import { processTriageJob } from "./triage-job";
 
@@ -80,12 +86,40 @@ async function main(): Promise<void> {
     }
   });
 
+  // Follow-up worker: re-attaches a worktree on the PR's branch, runs
+  // claude with the reviewer's instruction, commits + pushes. Same
+  // 30-minute lock as the agent job — apply-fix runs can be long.
+  await (
+    boss as unknown as {
+      work<T>(
+        name: string,
+        options: object,
+        handler: (jobs: Array<{ id: string; data: T }>) => Promise<void>,
+      ): Promise<string>;
+    }
+  ).work<PrFollowupJob>(JOB_PR_FOLLOWUP, { expireInSeconds: 30 * 60 }, async (jobs) => {
+    for (const job of jobs) {
+      log.info({ id: job.id, payload: job.data }, "pr-followup job picked up");
+      await processPrFollowupJob(job.data);
+    }
+  });
+
+  await boss.work<PrCommentPollJob>(JOB_PR_COMMENT_POLL, async (jobs) => {
+    for (const _ of jobs) {
+      await processPrCommentPollJob();
+    }
+  });
+
   // First-run defaults. Idempotent: subsequent boots respect whatever
   // the operator set in the UI (including "never"). Defaults match the
   // 15m / 30m / 1h / 4h / 1d presets the UI offers — keep them in that
   // set so the dropdowns reflect actual values.
   await ensureDefaultSchedule(JOB_SENTRY_POLL, "*/15 * * * *", { lookbackMinutes: 15 });
   await ensureDefaultSchedule(JOB_HEALTH_CHECK, "*/15 * * * *");
+  // PR comment poll runs every 15m as a fallback for when the GitHub
+  // webhook is not configured (no GITHUB_WEBHOOK_SECRET) or webhook
+  // delivery dropped a payload. Idempotent via lastReviewedCommentAt.
+  await ensureDefaultSchedule(JOB_PR_COMMENT_POLL, "*/15 * * * *");
 
   log.info("worker ready");
 }

@@ -79,6 +79,19 @@ export const prs = pgTable(
     url: text("url").notNull(),
     isDraft: boolean("is_draft").notNull(),
     needsHuman: boolean("needs_human").notNull().default(false),
+    // Review-gate state machine.
+    //   none         — no review run yet (legacy rows) or review approved.
+    //   waiting_human — reviewer found a blocker, PR flipped to draft,
+    //                   waiting for a /sfb-prefixed comment from an
+    //                   allow-listed reviewer.
+    //   in_progress  — follow-up worker is actively applying changes.
+    humanReviewState: text("human_review_state").notNull().default("none"),
+    // Highest comment timestamp the follow-up loop has already acted on.
+    // Used by both webhook and cron paths to skip already-processed
+    // comments — webhook can deliver out of order, and the cron is a
+    // belt-and-braces backstop, so idempotency lives here, not in the
+    // delivery layer.
+    lastReviewedCommentAt: timestamp("last_reviewed_comment_at", { withTimezone: true }),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique("prs_repo_number_unique").on(t.repo, t.number)],

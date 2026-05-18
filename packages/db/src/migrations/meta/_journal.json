@@ -36,6 +36,13 @@
       "when": 1779039358794,
       "tag": "0004_previous_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779061801804,
+      "tag": "0005_loving_the_fallen",
+      "breakpoints": true
     }
   ]
 }

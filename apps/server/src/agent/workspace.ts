@@ -101,3 +101,49 @@ export async function createWorkspace(input: {
     },
   };
 }
+
+/**
+ * Re-attach a worktree to an EXISTING branch in the cached clone. Used
+ * by the pr-followup worker: a human reviewer left a `/sfb` comment on
+ * a PR the bot opened, and we need to apply more changes to the same
+ * branch. The branch ref was preserved by `createWorkspace`'s cleanup
+ * (worktree removed, branch kept).
+ *
+ * Fetches origin first so we pick up anything pushed to the branch
+ * upstream since the original run.
+ */
+export async function attachWorkspace(input: {
+  followupId: string;
+  repo: string;
+  branch: string;
+}): Promise<Workspace> {
+  const token = await resolveGithubToken();
+  const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
+  const cache = cacheDirFor(input.repo);
+  const dir = join(env.WORK_DIR, `followup-${input.followupId}`);
+
+  if (!(await exists(cache))) {
+    throw new Error(
+      `repo cache missing for ${input.repo} — cannot follow up on a PR whose original clone is gone`,
+    );
+  }
+  await spawn(["git", "remote", "set-url", "origin", cloneUrl], { cwd: cache });
+  const fetch = await spawn(["git", "fetch", "--prune", "origin"], { cwd: cache });
+  if (fetch.exit !== 0) {
+    throw new Error(`git fetch failed: ${fetch.stderr}`);
+  }
+  await mkdir(env.WORK_DIR, { recursive: true });
+  const wt = await spawn(["git", "worktree", "add", dir, input.branch], { cwd: cache });
+  if (wt.exit !== 0) {
+    throw new Error(`git worktree add (re-attach) failed: ${wt.stderr}`);
+  }
+
+  return {
+    dir,
+    branch: input.branch,
+    cleanup: async () => {
+      await spawn(["git", "worktree", "remove", "--force", dir], { cwd: cache });
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}

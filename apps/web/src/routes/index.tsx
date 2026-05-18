@@ -6,9 +6,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@sentry-fixer-bot/ui/components/card";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Input } from "@sentry-fixer-bot/ui/components/input";
+import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Check, ChevronDown, ChevronRight, Terminal } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  KeyRound,
+  Terminal,
+  Webhook,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -155,9 +166,241 @@ function HomeWizard() {
               ))}
             </CardContent>
           </Card>
+
+          <GithubWebhookCard />
+          <SentryWebhookCard />
         </>
       )}
     </div>
+  );
+}
+
+type WebhookCardProps = {
+  title: string;
+  description: React.ReactNode;
+  url: string;
+  configured: boolean;
+  secretKey: "GITHUB_WEBHOOK_SECRET" | "SENTRY_WEBHOOK_SECRET";
+  invalidateKey: readonly unknown[];
+  help: React.ReactNode;
+};
+
+/**
+ * Shared shell for webhook setup cards. Renders the URL field, the
+ * secret paste+generate flow, and a per-provider instructions block.
+ * Both the GitHub and Sentry cards are thin wrappers around this — keeps
+ * the security-sensitive bits (clipboard, crypto.getRandomValues, write-
+ * only secret API) in exactly one place.
+ */
+function WebhookCard({
+  title,
+  description,
+  url,
+  configured,
+  secretKey,
+  invalidateKey,
+  help,
+}: WebhookCardProps) {
+  const qc = useQueryClient();
+  const [secret, setSecret] = useState("");
+  const save = useMutation(
+    trpc.settings.setSecret.mutationOptions({
+      onSuccess: () => {
+        toast.success(`${title} secret saved`);
+        setSecret("");
+        qc.invalidateQueries({ queryKey: invalidateKey });
+      },
+      onError: (err) => toast.error(err.message),
+    }),
+  );
+
+  // 256-bit hex (64 chars) — big enough that HMAC collision probability
+  // is irrelevant, short enough to fit on one line of the provider's UI
+  // without wrapping. Generated in the browser so the value never has to
+  // round-trip back from the server for display.
+  const generate = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const hex = Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    setSecret(hex);
+  };
+
+  const copy = (s: string, label: string) => {
+    navigator.clipboard.writeText(s).then(
+      () => toast.success(`${label} copied`),
+      () => toast.error("Clipboard blocked — copy manually"),
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Webhook className="h-4 w-4" /> {title}
+          <span
+            className={
+              configured
+                ? "ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300"
+                : "ml-2 rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] text-zinc-400"
+            }
+          >
+            {configured ? "configured" : "optional"}
+          </span>
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-xs">Webhook URL</Label>
+          <div className="mt-1 flex gap-2">
+            <Input value={url} readOnly className="font-mono text-xs" />
+            <Button variant="outline" size="sm" onClick={() => copy(url, "URL")} disabled={!url}>
+              <Copy className="mr-1 h-3 w-3" />
+              Copy
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <Label className="text-xs">Webhook secret</Label>
+          <div className="mt-1 flex gap-2">
+            <Input
+              type="text"
+              placeholder={
+                configured
+                  ? "Already saved — paste a new one to rotate"
+                  : "Paste or generate a secret"
+              }
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <Button variant="outline" size="sm" onClick={generate}>
+              <KeyRound className="mr-1 h-3 w-3" />
+              Generate
+            </Button>
+            <Button
+              size="sm"
+              disabled={!secret.trim() || save.isPending}
+              onClick={() => save.mutate({ key: secretKey, value: secret.trim() })}
+            >
+              {save.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+          {secret ? (
+            <p className="mt-1 text-[11px] text-amber-400">
+              Copy this secret now — after Save it will never be shown again. Paste the same value
+              into the provider's webhook config.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] text-zinc-400">
+          {help}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GithubWebhookCard() {
+  const info = useQuery(trpc.setup.githubWebhookInfo.queryOptions());
+  return (
+    <WebhookCard
+      title="GitHub PR webhook"
+      description={
+        <>
+          Optional. Lets reviewers say <code className="rounded bg-zinc-800 px-1">/sfb apply</code>{" "}
+          on a PR comment and have the bot apply changes within seconds. Without it, a 15-minute
+          cron polls comments as a fallback.
+        </>
+      }
+      url={info.data?.url ?? ""}
+      configured={info.data?.configured ?? false}
+      secretKey="GITHUB_WEBHOOK_SECRET"
+      invalidateKey={trpc.setup.githubWebhookInfo.queryKey()}
+      help={
+        <>
+          <div className="mb-1 font-medium text-zinc-300">Configure on GitHub</div>
+          <ol className="ml-4 list-decimal space-y-1">
+            <li>
+              GitHub →{" "}
+              <span className="text-zinc-300">Settings → Developer settings → GitHub Apps</span> →
+              your app.
+            </li>
+            <li>
+              Set <span className="text-zinc-300">Webhook URL</span> to the URL above.
+            </li>
+            <li>
+              Set <span className="text-zinc-300">Webhook secret</span> to the secret above.
+            </li>
+            <li>
+              Set <span className="text-zinc-300">Content type</span> to{" "}
+              <code className="rounded bg-zinc-800 px-1">application/json</code>.
+            </li>
+            <li>
+              Under <span className="text-zinc-300">Permissions & events</span> → Subscribe to{" "}
+              <code className="rounded bg-zinc-800 px-1">Issue comment</code>.
+            </li>
+            <li>Save. GitHub will fire a ping; check server logs for "x-github-event: ping".</li>
+          </ol>
+        </>
+      }
+    />
+  );
+}
+
+function SentryWebhookCard() {
+  const info = useQuery(trpc.setup.sentryWebhookInfo.queryOptions());
+  return (
+    <WebhookCard
+      title="Sentry alert webhook"
+      description={
+        <>
+          Optional. Lets new Sentry issues trigger the agent in real time instead of waiting for the
+          15-minute Sentry poll. Recommended for production so first-occurrence alerts get a draft
+          PR within ~3 minutes.
+        </>
+      }
+      url={info.data?.url ?? ""}
+      configured={info.data?.configured ?? false}
+      secretKey="SENTRY_WEBHOOK_SECRET"
+      invalidateKey={trpc.setup.sentryWebhookInfo.queryKey()}
+      help={
+        <>
+          <div className="mb-1 font-medium text-zinc-300">Configure on Sentry</div>
+          <ol className="ml-4 list-decimal space-y-1">
+            <li>
+              Sentry →{" "}
+              <span className="text-zinc-300">
+                Settings → Developer Settings → Internal Integrations
+              </span>{" "}
+              → New Integration.
+            </li>
+            <li>
+              Set <span className="text-zinc-300">Webhook URL</span> to the URL above.
+            </li>
+            <li>
+              Set <span className="text-zinc-300">Verify SSL</span> on for production. Leave a
+              friendly Name + Author.
+            </li>
+            <li>
+              Under <span className="text-zinc-300">Permissions</span> grant{" "}
+              <code className="rounded bg-zinc-800 px-1">Issue & Event: Read</code>.
+            </li>
+            <li>
+              Under <span className="text-zinc-300">Webhooks</span> subscribe to{" "}
+              <code className="rounded bg-zinc-800 px-1">issue</code>.
+            </li>
+            <li>
+              Save the integration. Sentry generates a <em>Client Secret</em> — paste it into the
+              secret field above (replace anything Generate created) and Save.
+            </li>
+          </ol>
+        </>
+      }
+    />
   );
 }
 

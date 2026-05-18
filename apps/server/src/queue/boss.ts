@@ -1,12 +1,26 @@
 import { env } from "@sentry-fixer-bot/env/server";
 import { PgBoss } from "pg-boss";
-import { JOB_AGENT, JOB_HEALTH_CHECK, JOB_SENTRY_POLL, JOB_TRIAGE } from "./jobs";
+import {
+  JOB_AGENT,
+  JOB_HEALTH_CHECK,
+  JOB_PR_COMMENT_POLL,
+  JOB_PR_FOLLOWUP,
+  JOB_SENTRY_POLL,
+  JOB_TRIAGE,
+} from "./jobs";
 
 let cached: PgBoss | null = null;
 
 async function ensureQueues(boss: PgBoss): Promise<void> {
   // pg-boss v12 requires queues to exist before send/work
-  for (const name of [JOB_TRIAGE, JOB_AGENT, JOB_SENTRY_POLL, JOB_HEALTH_CHECK]) {
+  for (const name of [
+    JOB_TRIAGE,
+    JOB_AGENT,
+    JOB_SENTRY_POLL,
+    JOB_HEALTH_CHECK,
+    JOB_PR_FOLLOWUP,
+    JOB_PR_COMMENT_POLL,
+  ]) {
     try {
       await boss.createQueue(name);
     } catch {

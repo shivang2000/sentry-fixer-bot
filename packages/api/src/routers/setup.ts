@@ -139,4 +139,47 @@ export const setupRouter = router({
     const list = await claudeMcpList();
     return list;
   }),
+
+  /**
+   * Information the home-page card needs to render the GitHub webhook
+   * setup section: the delivery URL the operator should paste into
+   * their GitHub App's "Webhook URL" field, and whether the matching
+   * shared secret has been saved yet.
+   *
+   * The URL is derived from PUBLIC_BASE_URL when set (production), and
+   * falls back to the request origin via `BETTER_AUTH_URL` so dev
+   * containers still produce something sensible. Always suffixes the
+   * fixed `/webhooks/github` path.
+   */
+  githubWebhookInfo: protectedProcedure.query(() => {
+    const base = process.env.PUBLIC_BASE_URL ?? process.env.BETTER_AUTH_URL ?? "";
+    const url = base ? `${base.replace(/\/$/, "")}/webhooks/github` : "/webhooks/github";
+    return {
+      url,
+      configured: hasEnvSecret("GITHUB_WEBHOOK_SECRET"),
+      events: ["issue_comment"],
+      contentType: "application/json",
+    };
+  }),
+
+  /**
+   * Same shape as githubWebhookInfo but for the Sentry side. The Sentry
+   * webhook endpoint at /webhooks/sentry was the first event surface
+   * shipped on this server; the card on the home page lets operators
+   * configure it without leaving the wizard, mirroring the GitHub flow
+   * for consistency.
+   *
+   * `events` reflects what the existing handler in sentry-webhook.ts
+   * actually filters on (issue.created); kept here so the UI can
+   * remind the operator which Sentry resource to subscribe to.
+   */
+  sentryWebhookInfo: protectedProcedure.query(() => {
+    const base = process.env.PUBLIC_BASE_URL ?? process.env.BETTER_AUTH_URL ?? "";
+    const url = base ? `${base.replace(/\/$/, "")}/webhooks/sentry` : "/webhooks/sentry";
+    return {
+      url,
+      configured: hasEnvSecret("SENTRY_WEBHOOK_SECRET"),
+      resources: ["issue"],
+    };
+  }),
 });
