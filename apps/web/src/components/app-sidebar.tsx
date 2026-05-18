@@ -41,8 +41,8 @@ import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
 
 const NAV_PRIMARY = [
-  { to: "/chat", label: "Chat", icon: MessageSquareCode },
   { to: "/", label: "Home", icon: Home },
+  { to: "/chat", label: "Chat", icon: MessageSquareCode },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ] as const;
 

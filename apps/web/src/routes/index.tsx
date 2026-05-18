@@ -203,6 +203,12 @@ function WebhookCard({
 }: WebhookCardProps) {
   const qc = useQueryClient();
   const [secret, setSecret] = useState("");
+  // Collapsed by default. The operator doesn't need to see secret +
+  // setup steps every time they hit the home page — surface as a thin
+  // row, expand on click. Matches GitHub/GitLab's "advanced settings"
+  // pattern. Configured webhooks naturally fall to the bottom of the
+  // page visual weight.
+  const [open, setOpen] = useState(false);
   const save = useMutation(
     trpc.settings.setSecret.mutationOptions({
       onSuccess: () => {
@@ -235,71 +241,84 @@ function WebhookCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Webhook className="h-4 w-4" /> {title}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-6 py-3 text-left hover:bg-zinc-900/40"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <Webhook className="h-4 w-4 text-zinc-400" />
+          <span className="font-medium">{title}</span>
           <span
             className={
               configured
-                ? "ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300"
-                : "ml-2 rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] text-zinc-400"
+                ? "ml-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300"
+                : "ml-1 rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] text-zinc-400"
             }
           >
             {configured ? "configured" : "optional"}
           </span>
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-xs">Webhook URL</Label>
-          <div className="mt-1 flex gap-2">
-            <Input value={url} readOnly className="font-mono text-xs" />
-            <Button variant="outline" size="sm" onClick={() => copy(url, "URL")} disabled={!url}>
-              <Copy className="mr-1 h-3 w-3" />
-              Copy
-            </Button>
+        </div>
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-zinc-500" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-zinc-500" />
+        )}
+      </button>
+      {open ? (
+        <CardContent className="space-y-4 border-zinc-800 border-t pt-4">
+          <p className="text-xs text-zinc-500">{description}</p>
+          <div>
+            <Label className="text-xs">Webhook URL</Label>
+            <div className="mt-1 flex gap-2">
+              <Input value={url} readOnly className="font-mono text-xs" />
+              <Button variant="outline" size="sm" onClick={() => copy(url, "URL")} disabled={!url}>
+                <Copy className="mr-1 h-3 w-3" />
+                Copy
+              </Button>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <Label className="text-xs">Webhook secret</Label>
-          <div className="mt-1 flex gap-2">
-            <Input
-              type="text"
-              placeholder={
-                configured
-                  ? "Already saved — paste a new one to rotate"
-                  : "Paste or generate a secret"
-              }
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <Button variant="outline" size="sm" onClick={generate}>
-              <KeyRound className="mr-1 h-3 w-3" />
-              Generate
-            </Button>
-            <Button
-              size="sm"
-              disabled={!secret.trim() || save.isPending}
-              onClick={() => save.mutate({ key: secretKey, value: secret.trim() })}
-            >
-              {save.isPending ? "Saving…" : "Save"}
-            </Button>
+          <div>
+            <Label className="text-xs">Webhook secret</Label>
+            <div className="mt-1 flex gap-2">
+              <Input
+                type="text"
+                placeholder={
+                  configured
+                    ? "Already saved — paste a new one to rotate"
+                    : "Paste or generate a secret"
+                }
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <Button variant="outline" size="sm" onClick={generate}>
+                <KeyRound className="mr-1 h-3 w-3" />
+                Generate
+              </Button>
+              <Button
+                size="sm"
+                disabled={!secret.trim() || save.isPending}
+                onClick={() => save.mutate({ key: secretKey, value: secret.trim() })}
+              >
+                {save.isPending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+            {secret ? (
+              <p className="mt-1 text-[11px] text-amber-400">
+                Copy this secret now — after Save it will never be shown again. Paste the same value
+                into the provider's webhook config.
+              </p>
+            ) : null}
           </div>
-          {secret ? (
-            <p className="mt-1 text-[11px] text-amber-400">
-              Copy this secret now — after Save it will never be shown again. Paste the same value
-              into the provider's webhook config.
-            </p>
-          ) : null}
-        </div>
 
-        <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] text-zinc-400">
-          {help}
-        </div>
-      </CardContent>
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] text-zinc-400">
+            {help}
+          </div>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
