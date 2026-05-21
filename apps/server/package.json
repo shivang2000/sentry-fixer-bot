@@ -13,6 +13,7 @@
     "@alertforge/core": "workspace:*",
     "@alertforge/source-sentry": "workspace:*",
     "@alertforge/step-budget": "workspace:*",
+    "@alertforge/step-classify": "workspace:*",
     "@alertforge/step-secret-scan": "workspace:*",
     "@alertforge/step-test-gate": "workspace:*",
     "@anthropic-ai/sdk": "^0.96.0",

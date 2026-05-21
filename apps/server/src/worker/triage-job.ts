@@ -1,4 +1,5 @@
 import { extractStackTrace, getLatestEvent, postIssueComment } from "@alertforge/source-sentry";
+import { classify } from "@alertforge/step-classify";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { alerts } from "@sentry-fixer-bot/db/schema/domain";
@@ -8,7 +9,6 @@ import { publishJob } from "../queue/boss";
 import { JOB_AGENT, type TriageJob } from "../queue/jobs";
 import { appendRunLog } from "../runs/log";
 import { createRun, updateRun } from "../runs/persist";
-import { classify } from "../triage/classify";
 import { resolveOrCreateRepoConfig } from "../triage/resolve-repo";
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"] as const;

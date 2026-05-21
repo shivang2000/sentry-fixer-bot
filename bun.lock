@@ -26,6 +26,7 @@
         "@alertforge/core": "workspace:*",
         "@alertforge/source-sentry": "workspace:*",
         "@alertforge/step-budget": "workspace:*",
+        "@alertforge/step-classify": "workspace:*",
         "@alertforge/step-secret-scan": "workspace:*",
         "@alertforge/step-test-gate": "workspace:*",
         "@anthropic-ai/sdk": "^0.96.0",
@@ -208,6 +209,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/steps/classify": {
+      "name": "@alertforge/step-classify",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@sentry-fixer-bot/env": "workspace:*",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/steps/secret-scan": {
       "name": "@alertforge/step-secret-scan",
       "version": "0.0.0",
@@ -275,6 +289,8 @@
     "@alertforge/source-sentry": ["@alertforge/source-sentry@workspace:packages/sources/sentry"],
 
     "@alertforge/step-budget": ["@alertforge/step-budget@workspace:packages/steps/budget"],
+
+    "@alertforge/step-classify": ["@alertforge/step-classify@workspace:packages/steps/classify"],
 
     "@alertforge/step-secret-scan": ["@alertforge/step-secret-scan@workspace:packages/steps/secret-scan"],
 
