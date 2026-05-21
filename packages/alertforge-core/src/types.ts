@@ -174,11 +174,83 @@ export interface ModelProvider {
   complete(args: { model: string } & PromptMessages): Promise<string>;
 }
 
+/**
+ * Run-log line consumed by `appendLog` on StepDeps. Mirrors the shape
+ * apps/server/src/runs/log.ts `appendRunLog` accepts so wrappers can
+ * forward without rebinding fields. `runId` is implicit (curried in by
+ * deps-factory) so wrappers only supply level/source/message.
+ */
+export interface RunLogLine {
+  level: "info" | "warn" | "error" | "debug";
+  source: string;
+  message: string;
+}
+
+/**
+ * Minimal S3-put surface used by wrappers (ctx archive + log archive).
+ * Concrete adapters live in apps/server (real AWS SDK client) and in
+ * test fixtures (in-memory recording). Wrappers depend on this narrow
+ * shape so the core package stays SDK-free.
+ */
+export interface S3PutClient {
+  put(key: string, body: Buffer | string, contentType?: string): Promise<string>;
+}
+
+/**
+ * Thin DB surface used by wrappers when they need to read/write rows
+ * outside the ctx store (channel_configs lookup, prs insert, repos_config
+ * read for legacy budget interop). Wrappers receive the project's actual
+ * drizzle client through this opaque slot; tests inject a stub. Typed as
+ * `unknown` here to keep alertforge-core free of drizzle types — consumers
+ * cast at the wrapper boundary.
+ */
+export type DbClient = unknown;
+
+/**
+ * Callback the consumer supplies to resolve a GitHub token for clone +
+ * fetch + push. Same shape as the per-step `ResolveGithubToken` aliases
+ * in @alertforge/step-workspace + @alertforge/step-open-pr; consolidated
+ * here so wrappers pull it via `deps.resolveToken` rather than passing
+ * a separate callback into each wrapper factory.
+ */
+export type ResolveToken = () => Promise<string>;
+
 export interface StepDeps {
   modelProvider: ModelProvider;
   log: Logger;
   sources: Map<string, SourceAdapter>;
   channels: Map<string, ChannelAdapter>;
+  /**
+   * Per-run run-log writer. Wrappers call `deps.appendLog({level, source,
+   * message})` to surface progress in the UI. The runId is curried by
+   * the deps factory in apps/server/src/pipeline/deps-factory.ts so the
+   * wrapper layer is run-agnostic and re-usable for the pr-followup
+   * worker later (P3c.3).
+   *
+   * Optional so existing tests + tests that don't care about logs can
+   * omit it without ceremony — the pipeline.test.ts and llm-step.test.ts
+   * suites both lived before this extension landed.
+   */
+  appendLog?: (line: RunLogLine) => Promise<void>;
+  /**
+   * Resolve a GitHub token for clone / fetch / push / gh CLI auth.
+   * Wrappers pass this down to step packages that take an explicit
+   * `resolveToken` callback (workspace, open-pr). Optional for the
+   * same back-compat reason as appendLog.
+   */
+  resolveToken?: ResolveToken;
+  /**
+   * Drizzle DB client (or stub). Used by wrappers that read/write rows
+   * outside the ctx store — e.g. open-pr inserts into `prs`, fan-out
+   * reads `channel_configs`. Optional for back-compat.
+   */
+  db?: DbClient;
+  /**
+   * S3 put client for archiving ctx + payloads. Optional for back-compat;
+   * the deps factory injects a real client in production and an in-memory
+   * one in tests.
+   */
+  s3?: S3PutClient;
 }
 
 // ---------- Logger (minimal contract; consumers plug pino) ----------
