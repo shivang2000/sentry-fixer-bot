@@ -2,23 +2,26 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { findAlertById, postIssueComment } from "@alertforge/source-sentry";
 import { checkRepoBudget, recordUsage } from "@alertforge/step-budget";
+import {
+  bindStreamToRunLogs,
+  parseAgentOutput,
+  renderAgentPrompt,
+  renderClaudeHome,
+  spawnClaudeAgent,
+} from "@alertforge/step-fix-agent";
+import { runReviewer } from "@alertforge/step-review-pr";
 import { type SecretFinding, scanText } from "@alertforge/step-secret-scan";
 import { ensureDeps, resolveTestCommand, runRepoTests } from "@alertforge/step-test-gate";
+import { createWorkspace } from "@alertforge/step-workspace";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { prs } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
-import { parseAgentOutput } from "../agent/parse-output";
-import { renderAgentPrompt } from "../agent/prompt";
-import { renderClaudeHome } from "../agent/render-claude-home";
-import { spawnClaudeAgent } from "../agent/spawn";
-import { bindStreamToRunLogs } from "../agent/stream-parser";
-import { createWorkspace } from "../agent/workspace";
+import { resolveGithubToken } from "../github/auth";
 import { openPr } from "../github/pr";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
 import { log } from "../log";
 import type { AgentJob } from "../queue/jobs";
-import { runReviewer } from "../review/reviewer";
 import { appendRunLog } from "../runs/log";
 import { findRunById, updateRun } from "../runs/persist";
 
@@ -68,6 +71,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       runId: payload.runId,
       repo: payload.repo,
       baseBranch: cfg.defaultBranch,
+      resolveToken: resolveGithubToken,
     });
     await appendRunLog({
       runId: payload.runId,
@@ -189,7 +193,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
         // Stream each claude event (tool call / assistant text /
         // result) into run_logs so /runs/<id> shows live progress
         // instead of a single line + a long silent wait.
-        onLine: bindStreamToRunLogs(payload.runId, "agent-stream"),
+        onLine: bindStreamToRunLogs(appendRunLog, payload.runId, "agent-stream"),
       });
       await appendRunLog({
         runId: payload.runId,
@@ -374,6 +378,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       alertTitle: alert.title,
       agentSummary: outcome.summary,
       runId: payload.runId,
+      appendLog: appendRunLog,
     });
     await appendRunLog({
       runId: payload.runId,

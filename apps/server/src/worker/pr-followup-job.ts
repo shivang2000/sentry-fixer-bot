@@ -1,12 +1,14 @@
+import {
+  bindStreamToRunLogs,
+  renderClaudeHome,
+  spawnClaudeAgent,
+} from "@alertforge/step-fix-agent";
 import { ensureDeps, resolveTestCommand, runRepoTests } from "@alertforge/step-test-gate";
+import { attachWorkspace } from "@alertforge/step-workspace";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { alerts, prs } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
-import { renderClaudeHome } from "../agent/render-claude-home";
-import { spawnClaudeAgent } from "../agent/spawn";
-import { bindStreamToRunLogs } from "../agent/stream-parser";
-import { attachWorkspace } from "../agent/workspace";
 import { resolveGithubToken } from "../github/auth";
 import { commentOnPr, getPrState, markPrReady } from "../github/pr-ops";
 import { log } from "../log";
@@ -112,6 +114,7 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     // table indirectly through the runId. Cheaper to read it back here
     // than to denormalize again.
     branch: await branchForPr(pr.runId),
+    resolveToken: resolveGithubToken,
   });
   await appendRunLog({
     runId: pr.runId,
@@ -193,7 +196,7 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
         // Stream into the ORIGINAL run's timeline so the operator
         // sees one continuous story per PR — initial fix + every
         // /sfb follow-up — at /runs/<id>.
-        onLine: bindStreamToRunLogs(pr.runId, "followup-stream"),
+        onLine: bindStreamToRunLogs(appendRunLog, pr.runId, "followup-stream"),
       });
       agentExit = res.exitCode;
       log.info(

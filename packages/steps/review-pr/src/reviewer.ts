@@ -1,7 +1,10 @@
-import { extractAssistantText } from "../agent/parse-output";
-import { renderClaudeHome } from "../agent/render-claude-home";
-import { spawnClaudeAgent } from "../agent/spawn";
-import { bindStreamToRunLogs } from "../agent/stream-parser";
+import {
+  type AppendRunLog,
+  bindStreamToRunLogs,
+  extractAssistantText,
+  renderClaudeHome,
+  spawnClaudeAgent,
+} from "@alertforge/step-fix-agent";
 
 export type ReviewVerdict = "blocker" | "nit" | "approve" | "unknown";
 
@@ -26,6 +29,12 @@ export type ReviewInput = {
    * caller in agent-job.ts always passes the parent run's id.
    */
   runId?: string;
+  /**
+   * Log writer injected by the consumer (apps/server passes its
+   * appendRunLog from src/runs/log.ts). Required only when `runId` is
+   * set — when the reviewer streams, it needs somewhere to deliver.
+   */
+  appendLog?: AppendRunLog;
 };
 
 /**
@@ -64,7 +73,10 @@ export async function runReviewer(input: ReviewInput): Promise<ReviewResult> {
     // Stream review events into the same run timeline (different
     // source so the UI can distinguish them later). Skip when the
     // caller didn't pass a runId — keeps reviewer usable in isolation.
-    onLine: input.runId ? bindStreamToRunLogs(input.runId, "reviewer-stream") : undefined,
+    onLine:
+      input.runId && input.appendLog
+        ? bindStreamToRunLogs(input.appendLog, input.runId, "reviewer-stream")
+        : undefined,
   });
   const parsed = parseReview(res.stdout);
   return {

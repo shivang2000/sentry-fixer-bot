@@ -1,4 +1,15 @@
-import { appendRunLog } from "../runs/log";
+/**
+ * Log-writer callback the binder needs. Same shape as
+ * apps/server/src/runs/log.ts `appendRunLog`. Injecting it keeps the
+ * step package free of any DB / apps/server dependency — the consumer
+ * passes its own writer.
+ */
+export type AppendRunLog = (input: {
+  runId: string;
+  level: "info" | "warn" | "error" | "debug";
+  source: string;
+  message: string;
+}) => Promise<void>;
 
 /**
  * Bind a stream-parser to a run id. Returns an `onLine` callback
@@ -9,8 +20,12 @@ import { appendRunLog } from "../runs/log";
  * events ("agent-stream") from reviewer-pass events ("reviewer-stream")
  * and follow-up-loop events ("followup-stream") even though all three
  * call the same claude binary with the same JSONL output format.
+ *
+ * `appendLog` is the writer the consumer wants the events delivered to.
+ * apps/server passes its appendRunLog from src/runs/log.ts; tests can
+ * pass an in-memory recorder.
  */
-export function bindStreamToRunLogs(runId: string, source: string) {
+export function bindStreamToRunLogs(appendLog: AppendRunLog, runId: string, source: string) {
   return async (line: string): Promise<void> => {
     const ev = parseStreamEvent(line);
     if (!ev) return;
@@ -18,7 +33,7 @@ export function bindStreamToRunLogs(runId: string, source: string) {
     // the end. Logging it again as a full chunk would be redundant
     // noise; the kind=result message is a short "claude finished"
     // line so the timeline marks the transition.
-    await appendRunLog({
+    await appendLog({
       runId,
       level: ev.level,
       source,

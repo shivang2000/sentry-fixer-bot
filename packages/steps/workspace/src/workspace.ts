@@ -1,13 +1,20 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { env } from "@sentry-fixer-bot/env/server";
-import { resolveGithubToken } from "../github/auth";
 
 export type Workspace = {
   dir: string;
   branch: string;
   cleanup: () => Promise<void>;
 };
+
+/**
+ * Callback the consumer supplies to resolve a GitHub token for clone +
+ * fetch. Injecting it keeps the step package free of @sentry-fixer-bot/
+ * server internals; apps/server passes its resolveGithubToken from
+ * src/github/auth.ts.
+ */
+export type ResolveGithubToken = () => Promise<string>;
 
 function cacheDirFor(repo: string): string {
   // /sfb/state/repos/<owner>__<name>.git — bare-ish working clone,
@@ -53,8 +60,9 @@ export async function createWorkspace(input: {
   runId: string;
   repo: string;
   baseBranch: string;
+  resolveToken: ResolveGithubToken;
 }): Promise<Workspace> {
-  const token = await resolveGithubToken();
+  const token = await input.resolveToken();
   const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
   const cache = cacheDirFor(input.repo);
   const branch = `sfb/${input.runId}`;
@@ -128,8 +136,9 @@ export async function attachWorkspace(input: {
   followupId: string;
   repo: string;
   branch: string;
+  resolveToken: ResolveGithubToken;
 }): Promise<Workspace> {
-  const token = await resolveGithubToken();
+  const token = await input.resolveToken();
   const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
   const cache = cacheDirFor(input.repo);
   const dir = join(env.WORK_DIR, `followup-${input.followupId}`);

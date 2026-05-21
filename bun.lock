@@ -27,8 +27,11 @@
         "@alertforge/source-sentry": "workspace:*",
         "@alertforge/step-budget": "workspace:*",
         "@alertforge/step-classify": "workspace:*",
+        "@alertforge/step-fix-agent": "workspace:*",
+        "@alertforge/step-review-pr": "workspace:*",
         "@alertforge/step-secret-scan": "workspace:*",
         "@alertforge/step-test-gate": "workspace:*",
+        "@alertforge/step-workspace": "workspace:*",
         "@anthropic-ai/sdk": "^0.96.0",
         "@aws-sdk/client-s3": "^3.1047.0",
         "@hono/trpc-server": "^0.4.0",
@@ -222,6 +225,34 @@
         "typescript": "catalog:",
       },
     },
+    "packages/steps/fix-agent": {
+      "name": "@alertforge/step-fix-agent",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@sentry-fixer-bot/db": "workspace:*",
+        "@sentry-fixer-bot/env": "workspace:*",
+        "drizzle-orm": "^0.45.1",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/steps/review-pr": {
+      "name": "@alertforge/step-review-pr",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@alertforge/step-fix-agent": "workspace:*",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/steps/secret-scan": {
       "name": "@alertforge/step-secret-scan",
       "version": "0.0.0",
@@ -239,6 +270,19 @@
       "version": "0.0.0",
       "dependencies": {
         "@alertforge/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/steps/workspace": {
+      "name": "@alertforge/step-workspace",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@sentry-fixer-bot/env": "workspace:*",
       },
       "devDependencies": {
         "@sentry-fixer-bot/config": "workspace:*",
@@ -292,9 +336,15 @@
 
     "@alertforge/step-classify": ["@alertforge/step-classify@workspace:packages/steps/classify"],
 
+    "@alertforge/step-fix-agent": ["@alertforge/step-fix-agent@workspace:packages/steps/fix-agent"],
+
+    "@alertforge/step-review-pr": ["@alertforge/step-review-pr@workspace:packages/steps/review-pr"],
+
     "@alertforge/step-secret-scan": ["@alertforge/step-secret-scan@workspace:packages/steps/secret-scan"],
 
     "@alertforge/step-test-gate": ["@alertforge/step-test-gate@workspace:packages/steps/test-gate"],
+
+    "@alertforge/step-workspace": ["@alertforge/step-workspace@workspace:packages/steps/workspace"],
 
     "@antfu/ni": ["@antfu/ni@25.0.0", "", { "dependencies": { "ansis": "^4.0.0", "fzf": "^0.5.2", "package-manager-detector": "^1.3.0", "tinyexec": "^1.0.1" }, "bin": { "na": "bin/na.mjs", "ni": "bin/ni.mjs", "nr": "bin/nr.mjs", "nci": "bin/nci.mjs", "nlx": "bin/nlx.mjs", "nun": "bin/nun.mjs", "nup": "bin/nup.mjs" } }, "sha512-9q/yCljni37pkMr4sPrI3G4jqdIk074+iukc5aFJl7kmDCCsiJrbZ6zKxnES1Gwg+i9RcDZwvktl23puGslmvA=="],
 
