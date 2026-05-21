@@ -150,6 +150,32 @@
         "typescript": "catalog:",
       },
     },
+    "packages/channels/email": {
+      "name": "@alertforge/channel-email",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/channels/slack": {
+      "name": "@alertforge/channel-slack",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/config": {
       "name": "@sentry-fixer-bot/config",
       "version": "0.0.0",
@@ -354,6 +380,10 @@
     "zod": "^4.1.13",
   },
   "packages": {
+    "@alertforge/channel-email": ["@alertforge/channel-email@workspace:packages/channels/email"],
+
+    "@alertforge/channel-slack": ["@alertforge/channel-slack@workspace:packages/channels/slack"],
+
     "@alertforge/core": ["@alertforge/core@workspace:packages/alertforge-core"],
 
     "@alertforge/source-sentry": ["@alertforge/source-sentry@workspace:packages/sources/sentry"],
