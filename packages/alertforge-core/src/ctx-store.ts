@@ -18,6 +18,10 @@ export const DEFAULT_CAP_BYTES: Record<CtxField, number> = {
   review: 32 * 1024,
   follow_up: 32 * 1024,
   notifications: 32 * 1024,
+  // P3c.3: reviewer's /sfb comment payload for the followup pipeline.
+  // GitHub trims comments to 64KB on the wire so the cap mirrors that
+  // (legacy /sfb comments are rarely > a few hundred bytes).
+  instruction: 64 * 1024,
 };
 
 const LOG_FIELDS: ReadonlySet<CtxField> = new Set<CtxField>(["agent_transcript"]);

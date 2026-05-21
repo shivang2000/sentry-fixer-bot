@@ -129,7 +129,15 @@ export type CtxField =
   | "pr"
   | "review"
   | "follow_up"
-  | "notifications";
+  | "notifications"
+  // P3c.3: follow-up pipeline carries the reviewer's `/sfb` comment +
+  // pre-existing PR target through the same step graph the primary
+  // worker uses. `instruction` is the comment payload (body, author,
+  // commentId, createdAt) that wrapFollowupFixAgentStep feeds into the
+  // claude prompt. The pre-existing PR (number, branch, repo) is
+  // written into the existing `pr` field (cast at read for the richer
+  // shape) — see pipeline/wrappers/pr-guard.ts for the contract.
+  | "instruction";
 
 export interface CtxStore {
   readonly runId: string;
