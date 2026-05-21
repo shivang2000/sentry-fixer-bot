@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { scanText } from "./secret-scan";
+import { scanText } from "./scan";
 
 describe("scanText", () => {
   it("returns empty on clean content", () => {

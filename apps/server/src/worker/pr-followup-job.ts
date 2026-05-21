@@ -1,3 +1,4 @@
+import { ensureDeps, resolveTestCommand, runRepoTests } from "@alertforge/step-test-gate";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { alerts, prs } from "@sentry-fixer-bot/db/schema/domain";
@@ -6,9 +7,6 @@ import { renderClaudeHome } from "../agent/render-claude-home";
 import { spawnClaudeAgent } from "../agent/spawn";
 import { bindStreamToRunLogs } from "../agent/stream-parser";
 import { attachWorkspace } from "../agent/workspace";
-import { resolveTestCommand } from "../gate/detect-test-command";
-import { ensureDeps } from "../gate/ensure-deps";
-import { runRepoTests } from "../gate/run-tests";
 import { resolveGithubToken } from "../github/auth";
 import { commentOnPr, getPrState, markPrReady } from "../github/pr-ops";
 import { log } from "../log";
