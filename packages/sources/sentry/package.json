@@ -1,0 +1,32 @@
+{
+  "name": "@alertforge/source-sentry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adapter": "./src/adapter.ts",
+    "./dedup": "./src/dedup.ts",
+    "./sentry-client": "./src/sentry-client.ts",
+    "./post-comment": "./src/post-comment.ts",
+    "./alert-upsert": "./src/alert-upsert.ts",
+    "./parse-payload": "./src/parse-payload.ts",
+    "./parse-url": "./src/parse-url.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alertforge/core": "workspace:*",
+    "@sentry-fixer-bot/api": "workspace:*",
+    "@sentry-fixer-bot/db": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@sentry-fixer-bot/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

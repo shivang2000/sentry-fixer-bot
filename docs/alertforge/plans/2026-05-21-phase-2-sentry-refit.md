@@ -42,6 +42,14 @@ packages/sources/sentry/
 
 apps/server/src/routes/webhooks-generic.ts  POST /webhooks/:sourceType handler
 
+apps/server/src/register-adapters.ts        explicit boot-time registry
+                                            registration (called from index.ts);
+                                            replaces planned Bun.glob discovery
+
+packages/alertforge-core/src/hmac.ts        moved from apps/server/src/web/verify-hmac.ts;
+                                            now shared util for any adapter
+packages/alertforge-core/src/hmac.test.ts   relocated 5 tests
+
 docs/alertforge/catalog/sources.md          add Sentry row
 ```
 
@@ -61,17 +69,38 @@ packages/env/src/server.ts                  ensure SENTRY_WEBHOOK_SECRET and
 ### Move (preserve git blame via `git mv`)
 
 ```
-apps/server/src/sentry/client.ts        → packages/sources/sentry/src/sentry-client.ts (rename only)
-apps/server/src/sentry/comment.ts       → packages/sources/sentry/src/post-comment.ts
-apps/server/src/alerts/dedup-key.ts     → packages/sources/sentry/src/dedup.ts
-apps/server/src/alerts/persist.ts       → packages/sources/sentry/src/alert-upsert.ts
-apps/server/tests/helpers/fixtures.ts    → packages/sources/sentry/src/__tests__/fixtures.ts
+apps/server/src/sentry/client.ts          → packages/sources/sentry/src/sentry-client.ts
+apps/server/src/sentry/comment.ts         → packages/sources/sentry/src/post-comment.ts
+apps/server/src/alerts/dedup-key.ts       → packages/sources/sentry/src/dedup.ts
+apps/server/src/alerts/dedup-key.test.ts  → packages/sources/sentry/src/dedup.test.ts
+apps/server/src/alerts/persist.ts         → packages/sources/sentry/src/alert-upsert.ts
+                                            (still imports @sentry-fixer-bot/db; that
+                                            renames in P7)
+apps/server/src/web/verify-hmac.ts        → packages/alertforge-core/src/hmac.ts
+apps/server/src/web/verify-hmac.test.ts   → packages/alertforge-core/src/hmac.test.ts
+```
+
+Note: `apps/server/tests/helpers/fixtures.ts` mentioned in earlier draft does not exist;
+parsePayload fixtures will be authored fresh under
+`packages/sources/sentry/src/parse-payload.test.ts` (was sentry-webhook inlined parsing).
+
+### Adjust imports (no move, just update path)
+
+```
+apps/server/src/routes/github-webhook.ts  imports verifyHmacSha256 — repoint to
+                                          @alertforge/core
+apps/server/src/worker/sentry-poll-job.ts uses getSentryToken + sentry-runner;
+                                          left intact in P2 (refactor into a step in P3)
+apps/server/src/routes/sentry-webhook.ts  rewrite to use adapter.verifyWebhook /
+                                          adapter.parsePayload via registry; keeps
+                                          /webhooks/sentry path for back-compat
 ```
 
 ### Delete (after consumers updated)
 
 - `apps/server/src/sentry/` (empty dir after moves)
 - `apps/server/src/alerts/` (empty dir after moves)
+- `apps/server/src/web/verify-hmac.ts` + `.test.ts` (replaced by @alertforge/core/hmac)
 
 ## Concrete contract
 

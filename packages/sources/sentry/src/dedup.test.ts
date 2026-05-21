@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { dedupKey } from "./dedup-key";
+import { dedupKey } from "./dedup";
 
 describe("dedupKey", () => {
   it("returns the same key for identical (project, fingerprint) tuples", () => {

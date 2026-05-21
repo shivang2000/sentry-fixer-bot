@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { findAlertById, postIssueComment } from "@alertforge/source-sentry";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { prs } from "@sentry-fixer-bot/db/schema/domain";
@@ -11,7 +12,6 @@ import { type SecretFinding, scanText } from "../agent/secret-scan";
 import { spawnClaudeAgent } from "../agent/spawn";
 import { bindStreamToRunLogs } from "../agent/stream-parser";
 import { createWorkspace } from "../agent/workspace";
-import { findAlertById } from "../alerts/persist";
 import { checkRepoBudget, recordUsage } from "../budget/enforce";
 import { resolveTestCommand } from "../gate/detect-test-command";
 import { ensureDeps } from "../gate/ensure-deps";
@@ -23,7 +23,6 @@ import type { AgentJob } from "../queue/jobs";
 import { runReviewer } from "../review/reviewer";
 import { appendRunLog } from "../runs/log";
 import { findRunById, updateRun } from "../runs/persist";
-import { postIssueComment } from "../sentry/comment";
 
 export async function processAgentJob(payload: AgentJob): Promise<void> {
   const run = await findRunById(payload.runId);

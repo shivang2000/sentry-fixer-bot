@@ -11,7 +11,8 @@
     "./preset": "./src/preset.ts",
     "./ctx-store": "./src/ctx-store.ts",
     "./llm-step": "./src/llm-step.ts",
-    "./config-schema": "./src/config.schema.ts"
+    "./config-schema": "./src/config.schema.ts",
+    "./hmac": "./src/hmac.ts"
   },
   "scripts": {
     "test": "bun test",

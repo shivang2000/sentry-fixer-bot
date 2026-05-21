@@ -1,3 +1,4 @@
+import { verifyHmacSha256 } from "@alertforge/core";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { prs } from "@sentry-fixer-bot/db/schema/domain";
@@ -8,7 +9,6 @@ import { getPrState } from "../github/pr-ops";
 import { log } from "../log";
 import { publishJob } from "../queue/boss";
 import { JOB_PR_FOLLOWUP } from "../queue/jobs";
-import { verifyHmacSha256 } from "../web/verify-hmac";
 
 export const githubWebhook = new Hono();
 

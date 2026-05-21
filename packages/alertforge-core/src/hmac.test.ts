@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
-import { verifyHmacSha256 } from "./verify-hmac";
+import { verifyHmacSha256 } from "./hmac";
 
 function sign(secret: string, body: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");

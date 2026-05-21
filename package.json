@@ -4,7 +4,10 @@
   "workspaces": {
     "packages": [
       "apps/*",
-      "packages/*"
+      "packages/*",
+      "packages/sources/*",
+      "packages/channels/*",
+      "packages/steps/*"
     ],
     "catalog": {
       "dotenv": "^17.2.2",
