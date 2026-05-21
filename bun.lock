@@ -27,7 +27,9 @@
         "@alertforge/source-sentry": "workspace:*",
         "@alertforge/step-budget": "workspace:*",
         "@alertforge/step-classify": "workspace:*",
+        "@alertforge/step-fan-out-channels": "workspace:*",
         "@alertforge/step-fix-agent": "workspace:*",
+        "@alertforge/step-open-pr": "workspace:*",
         "@alertforge/step-review-pr": "workspace:*",
         "@alertforge/step-secret-scan": "workspace:*",
         "@alertforge/step-test-gate": "workspace:*",
@@ -225,6 +227,18 @@
         "typescript": "catalog:",
       },
     },
+    "packages/steps/fan-out-channels": {
+      "name": "@alertforge/step-fan-out-channels",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/steps/fix-agent": {
       "name": "@alertforge/step-fix-agent",
       "version": "0.0.0",
@@ -233,6 +247,18 @@
         "@sentry-fixer-bot/db": "workspace:*",
         "@sentry-fixer-bot/env": "workspace:*",
         "drizzle-orm": "^0.45.1",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/steps/open-pr": {
+      "name": "@alertforge/step-open-pr",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
       },
       "devDependencies": {
         "@sentry-fixer-bot/config": "workspace:*",
@@ -336,7 +362,11 @@
 
     "@alertforge/step-classify": ["@alertforge/step-classify@workspace:packages/steps/classify"],
 
+    "@alertforge/step-fan-out-channels": ["@alertforge/step-fan-out-channels@workspace:packages/steps/fan-out-channels"],
+
     "@alertforge/step-fix-agent": ["@alertforge/step-fix-agent@workspace:packages/steps/fix-agent"],
+
+    "@alertforge/step-open-pr": ["@alertforge/step-open-pr@workspace:packages/steps/open-pr"],
 
     "@alertforge/step-review-pr": ["@alertforge/step-review-pr@workspace:packages/steps/review-pr"],
 

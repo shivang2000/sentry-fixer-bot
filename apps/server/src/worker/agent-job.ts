@@ -9,6 +9,7 @@ import {
   renderClaudeHome,
   spawnClaudeAgent,
 } from "@alertforge/step-fix-agent";
+import { openPr } from "@alertforge/step-open-pr";
 import { runReviewer } from "@alertforge/step-review-pr";
 import { type SecretFinding, scanText } from "@alertforge/step-secret-scan";
 import { ensureDeps, resolveTestCommand, runRepoTests } from "@alertforge/step-test-gate";
@@ -18,7 +19,6 @@ import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { prs } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
 import { resolveGithubToken } from "../github/auth";
-import { openPr } from "../github/pr";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
 import { log } from "../log";
 import type { AgentJob } from "../queue/jobs";
@@ -353,6 +353,7 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
       body,
       isDraft,
       reviewers: cfg.prReviewers,
+      resolveToken: resolveGithubToken,
     });
 
     // Phase A — automated code-review pass. A second claude reviews the

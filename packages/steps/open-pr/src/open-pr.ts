@@ -1,4 +1,10 @@
-import { resolveGithubToken } from "./auth";
+/**
+ * Callback the consumer supplies to resolve a GitHub token for git
+ * push + `gh` CLI auth. Injecting it keeps this step package free
+ * of apps/server-internal imports; consumers pass their own
+ * resolveGithubToken.
+ */
+export type ResolveGithubToken = () => Promise<string>;
 
 export type OpenPrInput = {
   cwd: string;
@@ -9,16 +15,23 @@ export type OpenPrInput = {
   body: string;
   isDraft: boolean;
   reviewers: string[];
+  resolveToken: ResolveGithubToken;
 };
 
 export type OpenPrResult = { number: number; url: string };
 
 /**
- * Open a PR via the `gh` CLI. The CLI is configured with a fresh
- * installation token (no `gh auth login` on the host).
+ * Open a PR via the `gh` CLI. Stages + commits any uncommitted
+ * changes the agent made, pushes the branch, then opens the PR.
+ *
+ * Bundles commit-push + open-pr into one transactional flow because
+ * the three sub-steps share state (cwd, branch, token) and must
+ * succeed or fail together — splitting into separate PipelineStep
+ * modules in P3c will mean writing each sub-step's progress to ctx
+ * so a partial failure can be replayed.
  */
 export async function openPr(input: OpenPrInput): Promise<OpenPrResult> {
-  const token = await resolveGithubToken();
+  const token = await input.resolveToken();
 
   // Stage + commit any uncommitted changes the agent made
   await runStrict(input.cwd, ["git", "add", "-A"]);
