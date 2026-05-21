@@ -1,29 +1,81 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+/**
+ * Agent-job worker. P3c.2 flip: drives runPipeline against
+ * DEFAULT_STEPS instead of orchestrating each step inline.
+ *
+ * Body is intentionally thin — every pipeline step is composed via a
+ * `wrap*Step` factory in `apps/server/src/pipeline/default-steps.ts`,
+ * and the resulting `PipelineStep[]` is executed by the framework's
+ * `runPipeline` driver. Side effects that aren't part of the pure
+ * pipeline (Sentry comments, GitHub PR ops, prs-table writes, run
+ * status transitions) live in this file: the worker inspects the
+ * final ctx after the pipeline completes and fires whatever extra
+ * actions the legacy behavior requires.
+ *
+ * Stays compatible with the legacy run-status state machine:
+ *   - no_repo_match    repos_config row missing
+ *   - budget_exhausted budget step writes allowed=false
+ *   - agent_error      agent exited non-zero
+ *   - test_failed      test gate ran + failed
+ *   - no_change        agent produced no diff
+ *   - pr_opened        all systems go
+ *   - pr_opened_needs_human  reviewer flagged blocker
+ *   - error            unhandled exception in the worker
+ */
+
+import { rm } from "node:fs/promises";
+import { type CtxStore, DiskCtxStore, runPipeline } from "@alertforge/core";
 import { findAlertById, postIssueComment } from "@alertforge/source-sentry";
-import { checkRepoBudget, recordUsage } from "@alertforge/step-budget";
-import {
-  bindStreamToRunLogs,
-  parseAgentOutput,
-  renderAgentPrompt,
-  renderClaudeHome,
-  spawnClaudeAgent,
-} from "@alertforge/step-fix-agent";
-import { openPr } from "@alertforge/step-open-pr";
-import { runReviewer } from "@alertforge/step-review-pr";
-import { type SecretFinding, scanText } from "@alertforge/step-secret-scan";
-import { ensureDeps, resolveTestCommand, runRepoTests } from "@alertforge/step-test-gate";
-import { createWorkspace } from "@alertforge/step-workspace";
+import { recordUsage } from "@alertforge/step-budget";
 import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { prs } from "@sentry-fixer-bot/db/schema/domain";
+import { prs, runs } from "@sentry-fixer-bot/db/schema/domain";
+import { env } from "@sentry-fixer-bot/env/server";
 import { eq } from "drizzle-orm";
-import { resolveGithubToken } from "../github/auth";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
 import { log } from "../log";
+import { archiveCtxToS3, cleanupCtxDir } from "../pipeline/ctx-archive";
+import { buildDefaultSteps } from "../pipeline/default-steps";
+import { buildPipelineDeps } from "../pipeline/deps-factory";
+import { resolveTriggerForRun } from "../pipeline/trigger-resolver";
 import type { AgentJob } from "../queue/jobs";
 import { appendRunLog } from "../runs/log";
 import { findRunById, updateRun } from "../runs/persist";
+
+interface PrCtx {
+  number: number;
+  url: string;
+  isDraft: boolean;
+  needsHuman: boolean;
+}
+
+interface ReviewCtx {
+  verdict: "blocker" | "nit" | "approve" | "unknown";
+  body: string;
+}
+
+interface AgentOutputCtx {
+  exitCode: number;
+  summary: string;
+  confidence: string;
+  risk: string;
+  severity: string;
+  attempts: number;
+}
+
+interface TestResultCtx {
+  passed: boolean | null;
+  command: string | null;
+  attempts: number;
+}
+
+interface BudgetCtx {
+  allowed: boolean;
+  reason?: string;
+}
+
+interface SecretScanCtx {
+  findings: Array<{ file: string; line: number; pattern: string }>;
+  blocked: boolean;
+}
 
 export async function processAgentJob(payload: AgentJob): Promise<void> {
   const run = await findRunById(payload.runId);
@@ -31,523 +83,282 @@ export async function processAgentJob(payload: AgentJob): Promise<void> {
   const alert = await findAlertById(payload.alertId);
   if (!alert) return;
 
-  const db = createDb();
-  const cfgRows = await db
-    .select()
-    .from(reposConfig)
-    .where(eq(reposConfig.github, payload.repo))
-    .limit(1);
-  const cfg = cfgRows[0];
-  if (!cfg) {
+  // Resolve the trigger config. When the repo is unknown, mark the run
+  // no_repo_match and bail — same as legacy.
+  const resolved = await resolveTriggerForRun({
+    repo: payload.repo,
+    sourceProject: alert.sentryProject,
+  });
+  if (!resolved) {
     await updateRun(payload.runId, { status: "no_repo_match", endedAt: new Date() });
     return;
   }
+  const {
+    trigger,
+    defaultBranch,
+    testCommandOverride,
+    reviewers,
+    dailyTokenCap,
+    dailyCostCapCents,
+  } = resolved;
 
-  // Budget check
-  const budget = await checkRepoBudget(payload.repo);
-  if (!budget.allowed) {
-    await postIssueComment(
-      alert.sentryIssueId,
-      `sentry-fixer-bot: budget exhausted (${budget.reason}); not attempting a fix today.`,
-    );
-    await updateRun(payload.runId, { status: "budget_exhausted", endedAt: new Date() });
-    return;
+  // Per-run ctx store. WORK_DIR is the same volume the legacy worker
+  // cloned into; ctx/ sits next to workspace/ under {WORK_DIR}/{runId}.
+  const ctx = await DiskCtxStore.create(payload.runId, env.WORK_DIR);
+  await ctx.write("trigger", trigger);
+  await ctx.write("alert", alert);
+
+  // Record ctxDir + triggerId on the runs row so the UI can resolve
+  // forensic files and the cron orphan-prune knows which dirs to keep.
+  await createDb()
+    .update(runs)
+    .set({ ctxDir: ctx.dir, triggerId: trigger.id })
+    .where(eq(runs.id, payload.runId));
+
+  const stepsCompleted: string[] = [];
+  const deps = buildPipelineDeps({ runId: payload.runId });
+
+  const builtSteps = buildDefaultSteps({
+    runId: payload.runId,
+    repo: payload.repo,
+    baseBranch: defaultBranch,
+    reviewers,
+    testCommandOverride,
+  });
+
+  // Run the pipeline. onStepEnd records the canonical step list so the
+  // UI can render a per-run timeline; onStepError surfaces failures to
+  // the run log without aborting the worker (the wrapper itself decides
+  // whether the failure is fatal).
+  let pipelineErr: unknown = null;
+  try {
+    await runPipeline(ctx, trigger.config as never, builtSteps, deps, {
+      onStepEnd: async (name) => {
+        stepsCompleted.push(name);
+      },
+      onStepError: async (name, err) => {
+        await appendRunLog({
+          runId: payload.runId,
+          level: "error",
+          source: "pipeline",
+          message: `step ${name} failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      },
+    });
+  } catch (err) {
+    pipelineErr = err;
   }
 
-  // ws is created inside the try so any workspace-creation failure
-  // (stale worktree, git fetch 401, disk full) flows through the
-  // catch and sets status=error instead of leaving the run stuck on
-  // "running" forever. The finally guards against ws being undefined
-  // when cleanup runs.
-  let ws: Awaited<ReturnType<typeof createWorkspace>> | undefined;
-  try {
+  // Read final ctx state and drive the side-effect waterfall.
+  const finalStatus = await applyPostPipelineSideEffects({
+    ctx,
+    payload,
+    alertSentryIssueId: alert.sentryIssueId,
+    alertTitle: alert.title,
+    repo: payload.repo,
+    dailyTokenCap,
+    dailyCostCapCents,
+    stepsCompleted,
+    pipelineErr,
+  });
+  await updateRun(payload.runId, {
+    status: finalStatus,
+    stepsCompleted,
+    endedAt: new Date(),
+  });
+
+  // Archive ctx files to S3 + persist the key. The archive runs even
+  // on the failure path so an operator can pull the partial timeline
+  // for forensic analysis.
+  if (deps.s3) {
+    const archiveKey = await archiveCtxToS3({
+      ctx,
+      s3: deps.s3,
+      log: (level, message) =>
+        appendRunLog({ runId: payload.runId, level, source: "archive", message }),
+    });
+    if (archiveKey) {
+      await createDb()
+        .update(runs)
+        .set({ ctxArchiveS3: archiveKey })
+        .where(eq(runs.id, payload.runId));
+    }
+  }
+  await cleanupCtxDir(ctx);
+
+  // Best-effort cleanup of any per-run workspace dir that lingered.
+  // The wrapWorkspaceStep stashes a cleanup() in a closure-local handle
+  // that runs inside the pipeline; but if the pipeline threw before
+  // workspace finished, we still want the dir gone.
+  await rm(`${env.WORK_DIR}/${payload.runId}`, { recursive: true, force: true }).catch(() => {});
+}
+
+/**
+ * Inspect the post-pipeline ctx and fire whatever Sentry / GitHub /
+ * DB side effects the run requires. Returns the run status to persist.
+ *
+ * This function is THE source of truth for legacy parity: any post-run
+ * action that used to happen inline in the 500-LOC worker now happens
+ * here, driven by ctx fields.
+ */
+async function applyPostPipelineSideEffects(input: {
+  ctx: CtxStore;
+  payload: AgentJob;
+  alertSentryIssueId: string;
+  alertTitle: string;
+  repo: string;
+  dailyTokenCap: number;
+  dailyCostCapCents: number;
+  stepsCompleted: string[];
+  pipelineErr: unknown;
+}): Promise<string> {
+  // Pipeline itself blew up → record error and stop.
+  if (input.pipelineErr) {
+    const msg =
+      input.pipelineErr instanceof Error ? input.pipelineErr.message : String(input.pipelineErr);
+    log.error({ err: msg }, "agent pipeline failed");
     await appendRunLog({
-      runId: payload.runId,
-      level: "info",
+      runId: input.payload.runId,
+      level: "error",
+      source: "pipeline",
+      message: msg,
+    });
+    await updateRun(input.payload.runId, { error: msg });
+    return "error";
+  }
+
+  // Budget exhausted: legacy posted a Sentry comment + status=budget_exhausted.
+  const budget = await input.ctx.read<BudgetCtx>("budget");
+  if (budget && !budget.allowed) {
+    await postIssueComment(
+      input.alertSentryIssueId,
+      `sentry-fixer-bot: budget exhausted (${budget.reason ?? "unknown"}); not attempting a fix today.`,
+    );
+    return "budget_exhausted";
+  }
+
+  const agentOutput = await input.ctx.read<AgentOutputCtx>("agent_output");
+  const testResult = await input.ctx.read<TestResultCtx>("test_result");
+  const secretScan = await input.ctx.read<SecretScanCtx>("secret_scan");
+  const pr = await input.ctx.read<PrCtx>("pr");
+  const review = await input.ctx.read<ReviewCtx>("review");
+
+  // Persist the parsed agent fields on the run row so the UI list view
+  // can show confidence/risk/severity without re-parsing.
+  if (agentOutput) {
+    await updateRun(input.payload.runId, {
+      agentSummary: agentOutput.summary,
+      agentConfidence: agentOutput.confidence,
+      agentRisk: agentOutput.risk,
+      testPassed: testResult?.passed ?? null,
+    });
+  }
+
+  // Agent crashed mid-run. Workspace might have a partial diff but
+  // it's worse than no PR; legacy returned agent_error here.
+  if (agentOutput && agentOutput.exitCode !== 0) {
+    await appendRunLog({
+      runId: input.payload.runId,
+      level: "error",
       source: "agent",
-      message: `Cloning ${payload.repo}@${cfg.defaultBranch} into work dir…`,
+      message: "claude exited non-zero; skipping PR open.",
     });
-    ws = await createWorkspace({
-      runId: payload.runId,
-      repo: payload.repo,
-      baseBranch: cfg.defaultBranch,
-      resolveToken: resolveGithubToken,
-    });
-    await appendRunLog({
-      runId: payload.runId,
-      level: "info",
-      source: "agent",
-      message: `Workspace ready: ${ws.dir} (branch ${ws.branch})`,
-    });
-    // Resolve test command up-front so the agent's prompt can include
-    // the exact command we'll gate on later. `cfg.testCommand` is an
-    // override; otherwise we inspect the worktree's package.json. If
-    // neither yields a command, the gate is skipped and the prompt
-    // tells the agent there are no tests to run.
-    const resolvedTest = await resolveTestCommand({
-      cwd: ws.dir,
-      override: cfg.testCommand ?? null,
-    });
-    await appendRunLog({
-      runId: payload.runId,
-      level: "info",
-      source: "tests",
-      message: resolvedTest
-        ? `Test command (${resolvedTest.source}): ${resolvedTest.command}`
-        : "No test command found (no override + no test:coverage/test script). Skipping test gate.",
-    });
+    return "agent_error";
+  }
 
-    // Install project dependencies BEFORE the agent runs. Reason: the
-    // gate later invokes `${resolvedTest.command}` which usually
-    // requires node_modules (or poetry env, etc.). A clean worktree
-    // has none. We can't ask claude to install — its Bash tool would
-    // either hit its 2-min timeout or fight with the gate. Running it
-    // here means: (1) one install per worktree, not per attempt; (2)
-    // gate failures will be real test failures, not "command not
-    // found". Best-effort: non-zero exit logged but doesn't abort —
-    // some repos warn but still produce a usable node_modules.
-    if (resolvedTest) {
-      await appendRunLog({
-        runId: payload.runId,
-        level: "info",
-        source: "deps",
-        message: "Detecting + installing project dependencies for test gate…",
-      });
-      const dep = await ensureDeps({ cwd: ws.dir });
-      if (dep.ran) {
-        await appendRunLog({
-          runId: payload.runId,
-          level: dep.exitCode === 0 ? "info" : "warn",
-          source: "deps",
-          message: `${dep.command} → exit ${dep.exitCode} in ${(dep.durationMs / 1000).toFixed(1)}s`,
-        });
-        if (dep.stderr && dep.exitCode !== 0) {
-          await appendRunLog({
-            runId: payload.runId,
-            level: "warn",
-            source: "deps",
-            message: dep.stderr.slice(-2000),
-          });
-        }
-      } else {
-        await appendRunLog({
-          runId: payload.runId,
-          level: "debug",
-          source: "deps",
-          message: "No recognised lockfile/manifest; skipping dependency install.",
-        });
-      }
-    }
+  // Strict-mode secret scan blocked PR open. PR was not opened.
+  if (secretScan?.blocked) {
+    await postIssueComment(
+      input.alertSentryIssueId,
+      `sentry-fixer-bot: agent ran but the diff contains ${secretScan.findings.length} secret-shaped finding(s). No PR opened — see /runs/${input.payload.runId}.`,
+    );
+    return "error";
+  }
 
-    const prompt = renderAgentPrompt({
-      title: alert.title,
-      stackTrace: run.stackTrace ?? "",
-      suspectedFiles: run.suspectedFiles ?? [],
-      testCommand: resolvedTest?.command ?? null,
-      sentryIssueId: alert.sentryIssueId,
-      sentryProject: alert.sentryProject,
-      sentryOrgSlug: process.env.SENTRY_ORG_SLUG,
-      sentryLevel: alert.level,
-    });
+  // Tests ran + failed. Legacy posted a comment + returned test_failed.
+  // open-pr wrapper would have opened a draft PR in this case; we still
+  // want to surface the failure in Sentry.
+  if (testResult && testResult.passed === false && !pr) {
+    await postIssueComment(
+      input.alertSentryIssueId,
+      `sentry-fixer-bot: agent produced a fix but \`${testResult.command ?? "tests"}\` failed. No PR opened. See /runs/${input.payload.runId} for the test output.`,
+    );
+    return "test_failed";
+  }
 
-    const { mcpConfigPath } = await renderClaudeHome({ repo: payload.repo, runDir: ws.dir });
-
-    // Self-heal loop: spawn the agent, run the test gate, and if the
-    // gate fails (and there's a gate to fail), re-spawn the agent with
-    // the failure output appended so it can iterate. Bounded to keep
-    // runaway runs from chewing token budget — three attempts has been
-    // the empirical sweet spot in other agentic systems for "fix what
-    // you broke" without turning into an infinite loop on genuinely
-    // hard test failures.
-    const MAX_AGENT_ATTEMPTS = 3;
-    let agentRes = { exitCode: 0, stdout: "", stderr: "", durationMs: 0 };
-    let testPassed: boolean | null = null;
-    let lastTestStdout = "";
-    let lastTestStderr = "";
-
-    for (let attempt = 1; attempt <= MAX_AGENT_ATTEMPTS; attempt++) {
-      const isRetry = attempt > 1;
-      const attemptPrompt = isRetry
-        ? renderRetryPrompt({
-            originalPrompt: prompt,
-            testCommand: resolvedTest?.command ?? "",
-            testStdoutTail: lastTestStdout.slice(-3000),
-            testStderrTail: lastTestStderr.slice(-3000),
-            attempt,
-            maxAttempts: MAX_AGENT_ATTEMPTS,
-          })
-        : prompt;
-
-      await appendRunLog({
-        runId: payload.runId,
-        level: "info",
-        source: "agent",
-        message: isRetry
-          ? `Retry attempt ${attempt}/${MAX_AGENT_ATTEMPTS}: re-spawning claude with failing-test context…`
-          : `Spawning claude (model=sonnet, effort=high) in ${ws.dir}…`,
-      });
-      agentRes = await spawnClaudeAgent({
-        cwd: ws.dir,
-        prompt: attemptPrompt,
-        mcpConfigPath,
-        // Stream each claude event (tool call / assistant text /
-        // result) into run_logs so /runs/<id> shows live progress
-        // instead of a single line + a long silent wait.
-        onLine: bindStreamToRunLogs(appendRunLog, payload.runId, "agent-stream"),
-      });
-      await appendRunLog({
-        runId: payload.runId,
-        level: agentRes.exitCode === 0 ? "info" : "error",
-        source: "agent",
-        message: `claude exit ${agentRes.exitCode} in ${(agentRes.durationMs / 1000).toFixed(1)}s (attempt ${attempt})`,
-      });
-      if (agentRes.stdout) {
-        await appendRunLog({
-          runId: payload.runId,
-          level: "debug",
-          source: "agent",
-          message: agentRes.stdout.slice(-4000),
-        });
-      }
-      if (agentRes.stderr) {
-        await appendRunLog({
-          runId: payload.runId,
-          level: agentRes.exitCode === 0 ? "debug" : "error",
-          source: "claude-stderr",
-          message: agentRes.stderr.slice(-4000),
-        });
-      }
-
-      // Hard fail on the agent itself — no point retrying a broken
-      // tool. Operator must re-trigger after fixing claude.
-      if (agentRes.exitCode !== 0) break;
-
-      // No test gate configured for this repo → nothing to verify;
-      // succeed and move on.
-      if (!resolvedTest) {
-        testPassed = null;
-        break;
-      }
-
-      await appendRunLog({
-        runId: payload.runId,
-        level: "info",
-        source: "tests",
-        message: `Running \`${resolvedTest.command}\` (${resolvedTest.source}${resolvedTest.ecosystem ? ` / ${resolvedTest.ecosystem}` : ""}), attempt ${attempt}…`,
-      });
-      const testRes = await runRepoTests({ cwd: ws.dir, testCommand: resolvedTest.command });
-      testPassed = testRes.passed;
-      lastTestStdout = testRes.stdout;
-      lastTestStderr = testRes.stderr;
-      await appendRunLog({
-        runId: payload.runId,
-        level: testRes.passed ? "info" : "warn",
-        source: "tests",
-        message: testRes.passed
-          ? `Tests passed on attempt ${attempt}.`
-          : attempt < MAX_AGENT_ATTEMPTS
-            ? `Tests failed on attempt ${attempt}. Will retry.`
-            : `Tests failed on attempt ${attempt} (final). PR will not be opened.`,
-      });
-      if (testRes.stdout) {
-        await appendRunLog({
-          runId: payload.runId,
-          level: "debug",
-          source: "tests-stdout",
-          message: testRes.stdout.slice(-4000),
-        });
-      }
-      if (testRes.stderr) {
-        await appendRunLog({
-          runId: payload.runId,
-          level: testRes.passed ? "debug" : "error",
-          source: "tests-stderr",
-          message: testRes.stderr.slice(-4000),
-        });
-      }
-
-      if (testRes.passed) break;
-      // else: loop tail → next iteration will build a retry prompt
-      // from the just-captured stdout/stderr.
-    }
-
-    const outcome = parseAgentOutput(agentRes.stdout);
-
-    // Secret scan of the diff (after the loop — only the final state
-    // matters; intermediate scans would be noise).
-    const findings = await scanWorkspace(ws.dir);
-
-    const needsHuman = findings.length > 0;
-    const isDraft = findings.length > 0;
-
-    await updateRun(payload.runId, {
-      agentSummary: outcome.summary,
-      agentConfidence: outcome.confidence,
-      agentRisk: outcome.risk,
-      testPassed,
-    });
-
-    // claude bailed mid-flight (auth, transient API, hit token cap).
-    // The workspace may still have a partial diff that's worse than no
-    // PR — skip and record no_change. Operator sees the agent log line
-    // with exit code and can re-trigger.
-    if (agentRes.exitCode !== 0) {
-      await appendRunLog({
-        runId: payload.runId,
-        level: "error",
-        source: "agent",
-        message: "claude exited non-zero; skipping PR open.",
-      });
-      await updateRun(payload.runId, { status: "agent_error", endedAt: new Date() });
-      return;
-    }
-
-    // Tests must pass when we have a command to run them. Repos without
-    // any detected test setup skip this entirely — see the comment on
-    // the gate above for the rationale.
-    if (resolvedTest && testPassed === false) {
+  // No PR opened (no diff, no workspace, or skip-path).
+  if (!pr) {
+    // If the agent ran but produced no diff, legacy treated it as a
+    // triage-only outcome.
+    if (agentOutput) {
       await postIssueComment(
-        alert.sentryIssueId,
-        `sentry-fixer-bot: agent produced a fix but \`${resolvedTest.command}\` failed. No PR opened. See /runs/${payload.runId} for the test output.`,
+        input.alertSentryIssueId,
+        `sentry-fixer-bot: agent ran but produced no code change. Triage: ${agentOutput.summary.slice(0, 500)}`,
       );
-      await updateRun(payload.runId, { status: "test_failed", endedAt: new Date() });
-      return;
+      return "no_change";
     }
+    // Otherwise the run terminated early before fix-agent (rare); status
+    // depends on which step short-circuited.
+    if (input.stepsCompleted.includes("budget") && !budget?.allowed) return "budget_exhausted";
+    return "no_change";
+  }
 
-    // If agent didn't produce any change, no PR
-    if (!(await hasChanges(ws.dir))) {
-      await appendRunLog({
-        runId: payload.runId,
-        level: "warn",
-        source: "agent",
-        message: "claude produced no diff. Skipping PR. Summary recorded as triage-only.",
-      });
-      await updateRun(payload.runId, { status: "no_change", endedAt: new Date() });
-      await postIssueComment(
-        alert.sentryIssueId,
-        `sentry-fixer-bot: agent ran but produced no code change. Triage: ${outcome.summary.slice(0, 500)}`,
-      );
-      return;
-    }
+  // PR is open. Handle reviewer feedback + insert the prs row.
+  let finalIsDraft = pr.isDraft;
+  let humanReviewState: "none" | "waiting_human" = "none";
 
-    const title = `sfb: ${alert.title.slice(0, 100)}`;
-    const body = renderPrBody({
-      alert: alert.title,
-      problem: outcome.problem,
-      hypotheses: outcome.hypotheses,
-      fix: outcome.fix,
-      summary: outcome.summary,
-      confidence: outcome.confidence,
-      risk: outcome.risk,
-      severity: outcome.severity,
-      testPassed,
-      findings,
-    });
-
-    const pr = await openPr({
-      cwd: ws.dir,
-      repo: payload.repo,
-      branch: ws.branch,
-      baseBranch: cfg.defaultBranch,
-      title,
-      body,
-      isDraft,
-      reviewers: cfg.prReviewers,
-      resolveToken: resolveGithubToken,
-    });
-
-    // Phase A — automated code-review pass. A second claude reviews the
-    // diff with an adversarial reviewer persona, posts findings as a PR
-    // comment, and flips the PR to draft when it finds a `blocker` so
-    // the bot doesn't pretend the work is ready when it isn't.
-    //
-    // Failure-mode: reviewer crashes or returns unknown verdict —
-    // treated as advisory; PR stays in whatever draft state the test
-    // gate decided. We never want the reviewer to be a blocking
-    // dependency on opening the PR (the PR already exists at this
-    // point).
-    await appendRunLog({
-      runId: payload.runId,
-      level: "info",
-      source: "reviewer",
-      message: "Running automated code review pass…",
-    });
-    const review = await runReviewer({
-      cwd: ws.dir,
-      repo: payload.repo,
-      baseBranch: cfg.defaultBranch,
-      alertTitle: alert.title,
-      agentSummary: outcome.summary,
-      runId: payload.runId,
-      appendLog: appendRunLog,
-    });
-    await appendRunLog({
-      runId: payload.runId,
-      level: review.verdict === "blocker" ? "warn" : "info",
-      source: "reviewer",
-      message: `Review verdict=${review.verdict} (exit ${review.exitCode}, ${(review.durationMs / 1000).toFixed(1)}s)`,
-    });
-
-    let finalIsDraft = isDraft;
-    let humanReviewState: "none" | "waiting_human" = "none";
+  if (review) {
     if (review.verdict === "blocker") {
       humanReviewState = "waiting_human";
-      if (!isDraft) {
-        const dExit = await convertPrToDraft({ repo: payload.repo, prNumber: pr.number });
+      if (!pr.isDraft) {
+        // Try to flip the live PR back to draft. Best-effort.
+        const dExit = await convertPrToDraft({ repo: input.repo, prNumber: pr.number });
         finalIsDraft = dExit === 0;
-        await appendRunLog({
-          runId: payload.runId,
-          level: dExit === 0 ? "info" : "warn",
-          source: "reviewer",
-          message:
-            dExit === 0
-              ? "Reviewer found blocker — PR converted to draft."
-              : `Failed to convert PR to draft (gh exit ${dExit}); leaving as-is.`,
-        });
-      } else {
-        await appendRunLog({
-          runId: payload.runId,
-          level: "info",
-          source: "reviewer",
-          message: "Reviewer found blocker — PR already draft.",
-        });
       }
     }
+    // Post the reviewer's body as a PR comment regardless of verdict.
+    await commentOnPr({
+      repo: input.repo,
+      prNumber: pr.number,
+      body: renderReviewComment(review.verdict, review.body),
+    });
+  }
 
-    // Post the review as a PR comment regardless of verdict, so the
-    // human reviewer can see why the bot did (or didn't) flip to draft.
-    // Adds a /sfb help footer so reviewers know how to reply.
-    const reviewComment = renderReviewComment(review.verdict, review.body);
-    await commentOnPr({ repo: payload.repo, prNumber: pr.number, body: reviewComment });
-
-    await db.insert(prs).values({
-      alertId: alert.id,
-      runId: payload.runId,
-      repo: payload.repo,
+  await createDb()
+    .insert(prs)
+    .values({
+      alertId: input.payload.alertId,
+      runId: input.payload.runId,
+      repo: input.repo,
       number: pr.number,
       url: pr.url,
       isDraft: finalIsDraft,
-      needsHuman: needsHuman || review.verdict === "blocker",
+      needsHuman: pr.needsHuman || review?.verdict === "blocker",
       humanReviewState,
     });
 
-    await appendRunLog({
-      runId: payload.runId,
-      level: "info",
-      source: "agent",
-      message: `PR opened: ${pr.url}${finalIsDraft ? " (draft)" : ""}`,
-    });
-    await postIssueComment(alert.sentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
-    // testPassed is either true (gate ran + passed) or null (no tests
-    // detected and gate skipped). The `false` case returned earlier in
-    // the test-failed branch, so we don't need to handle it here.
-    await updateRun(payload.runId, {
-      status: review.verdict === "blocker" ? "pr_opened_needs_human" : "pr_opened",
-      endedAt: new Date(),
-    });
+  await appendRunLog({
+    runId: input.payload.runId,
+    level: "info",
+    source: "agent",
+    message: `PR opened: ${pr.url}${finalIsDraft ? " (draft)" : ""}`,
+  });
+  await postIssueComment(input.alertSentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
 
-    // Record budget (token/cost numbers are stubbed; spawn doesn't return them in headless mode)
-    await recordUsage({
-      repo: payload.repo,
-      tokens: 0,
-      costCents: 0,
-      capTokens: cfg.dailyTokenCap,
-      capCostCents: cfg.dailyCostCapCents,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.error({ err: msg }, "agent job failed");
-    await appendRunLog({ runId: payload.runId, level: "error", source: "agent", message: msg });
-    await updateRun(payload.runId, {
-      status: "error",
-      error: msg,
-      endedAt: new Date(),
-    });
-  } finally {
-    if (ws) await ws.cleanup();
-  }
+  // Record token/cost usage. The wrapper doesn't track usage today so
+  // we still call the legacy recordUsage with zeros; budget enforcement
+  // is still hard-gated by repos_config caps via the budget wrapper.
+  await recordUsage({
+    repo: input.repo,
+    tokens: 0,
+    costCents: 0,
+    capTokens: input.dailyTokenCap,
+    capCostCents: input.dailyCostCapCents,
+  });
+
+  return review?.verdict === "blocker" ? "pr_opened_needs_human" : "pr_opened";
 }
 
-async function hasChanges(cwd: string): Promise<boolean> {
-  const proc = Bun.spawn(["git", "status", "--porcelain"], { cwd, stdout: "pipe" });
-  const out = await new Response(proc.stdout).text();
-  await proc.exited;
-  return out.trim().length > 0;
-}
-
-async function scanWorkspace(dir: string): Promise<SecretFinding[]> {
-  // Scan only files git considers modified to limit the surface
-  const proc = Bun.spawn(["git", "diff", "--name-only", "HEAD"], { cwd: dir, stdout: "pipe" });
-  const names = (await new Response(proc.stdout).text())
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  await proc.exited;
-
-  const findings: SecretFinding[] = [];
-  for (const name of names) {
-    try {
-      const content = await readFile(join(dir, name), "utf8");
-      findings.push(...scanText(name, content));
-    } catch {
-      // file deleted or unreadable; skip
-    }
-  }
-  return findings;
-}
-
-/**
- * Build the prompt for a retry attempt after the test gate failed.
- *
- * The original prompt is included verbatim (so the agent still has the
- * stack trace + structured-summary requirements + skill prefix) plus a
- * `<previous-attempt>` block carrying the failing stdout/stderr tail.
- * The agent is told explicitly to fix what it just shipped, not start
- * over from scratch — the worktree already has its previous diff
- * applied, so a fresh re-analysis would be wasteful and could revert
- * useful work.
- */
-function renderRetryPrompt(input: {
-  originalPrompt: string;
-  testCommand: string;
-  testStdoutTail: string;
-  testStderrTail: string;
-  attempt: number;
-  maxAttempts: number;
-}): string {
-  return `${input.originalPrompt}
-
----
-
-<previous-attempt>
-Your previous fix attempt has already been applied to the working
-copy, but the test gate (\`${input.testCommand}\`) is still failing.
-This is attempt ${input.attempt}/${input.maxAttempts}; if you cannot
-make the tests pass on this attempt, the PR will NOT be opened.
-
-Diagnose the failure from the output below, then apply the smallest
-change that turns the suite green. Do not revert your earlier diff
-unless it was clearly the cause — prefer fixing forward. Do NOT run
-the test command yourself — the worker will re-run it after you
-finish. Your Bash tool has a 2-minute per-call timeout that this
-repo's suite usually exceeds, so a self-run would just get killed.
-
-TEST STDOUT (tail):
-${input.testStdoutTail || "(empty)"}
-
-TEST STDERR (tail):
-${input.testStderrTail || "(empty)"}
-</previous-attempt>
-`;
-}
-
-/**
- * Wrap the reviewer's raw output in a comment shell that:
- *  - badges the verdict at the top so humans can scan a list of PRs
- *    and tell blocker-comments apart from nit-comments,
- *  - documents the /sfb commands the human reviewer can use to talk
- *    back to the bot (Phase B follow-up loop).
- */
 function renderReviewComment(verdict: string, body: string): string {
   const badge =
     verdict === "blocker"
@@ -557,7 +368,6 @@ function renderReviewComment(verdict: string, body: string): string {
         : verdict === "approve"
           ? "✅ **Automated review: approved**"
           : "ℹ️ **Automated review**";
-
   const helpFooter = [
     "",
     "---",
@@ -567,77 +377,5 @@ function renderReviewComment(verdict: string, body: string): string {
     "- `/sfb <free-form instruction>` — e.g. `/sfb only fix the security issue, ignore the style nit`.",
     "_Comments without the `/sfb` prefix are treated as human-to-human chatter and ignored by the bot._",
   ].join("\n");
-
   return `${badge}\n\n${body}${helpFooter}`;
-}
-
-function renderPrBody(input: {
-  alert: string;
-  problem: string;
-  hypotheses: string;
-  fix: string;
-  summary: string;
-  confidence: string;
-  risk: string;
-  severity: string;
-  testPassed: boolean | null;
-  findings: SecretFinding[];
-}): string {
-  const lines: string[] = [];
-  lines.push("**sentry-fixer-bot** drafted this fix for a Sentry alert.");
-  lines.push("");
-  lines.push(`> ${input.alert}`);
-  lines.push("");
-  lines.push(`- Confidence: \`${input.confidence}\``);
-  lines.push(`- Risk: \`${input.risk}\``);
-  lines.push(`- Severity: \`${input.severity}\``);
-  lines.push(
-    `- Tests: ${
-      input.testPassed === true
-        ? "✅ pass"
-        : input.testPassed === false
-          ? "❌ fail"
-          : "⚪ no test command detected — verify manually"
-    }`,
-  );
-  if (input.findings.length > 0) {
-    lines.push(`- ⚠️ Secret-scan findings: ${input.findings.length}`);
-    lines.push("");
-    for (const f of input.findings) {
-      lines.push(`  - ${f.file}:${f.line} (${f.pattern})`);
-    }
-  }
-  lines.push("");
-  lines.push("---");
-  lines.push("");
-
-  // Structured sections when the agent emitted them. Falls back to the
-  // raw summary blob when the envelope was malformed so we never lose
-  // the agent's output entirely.
-  const hasStructured = input.problem || input.hypotheses || input.fix;
-  if (hasStructured) {
-    if (input.problem) {
-      lines.push("## Problem");
-      lines.push("");
-      lines.push(input.problem);
-      lines.push("");
-    }
-    if (input.hypotheses) {
-      lines.push("## Alternatives considered");
-      lines.push("");
-      lines.push(input.hypotheses);
-      lines.push("");
-    }
-    if (input.fix) {
-      lines.push("## Fix");
-      lines.push("");
-      lines.push(input.fix);
-      lines.push("");
-    }
-  } else {
-    lines.push("**Agent summary:**");
-    lines.push("");
-    lines.push(input.summary);
-  }
-  return lines.join("\n");
 }
