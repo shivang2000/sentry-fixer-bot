@@ -1,4 +1,5 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
+import { channelsRouter } from "./channels";
 import { chatRouter } from "./chat";
 import { cronRouter } from "./cron";
 import { ghRouter } from "./gh";
@@ -10,6 +11,7 @@ import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
 import { skillsRouter } from "./skills";
 import { systemRouter } from "./system";
+import { triggersRouter } from "./triggers";
 
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => "OK"),
@@ -29,5 +31,7 @@ export const appRouter = router({
   setup: setupRouter,
   cron: cronRouter,
   invites: invitesRouter,
+  triggers: triggersRouter,
+  channels: channelsRouter,
 });
 export type AppRouter = typeof appRouter;

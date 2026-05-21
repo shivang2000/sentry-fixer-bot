@@ -2,3 +2,4 @@ export * from "./admin";
 export * from "./auth";
 export * from "./domain";
 export * from "./invites";
+export * from "./triggers";

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -60,8 +61,28 @@ export const runs = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     error: text("error"),
+    // Alertforge 2.0 additions. triggerId binds the run to a configured
+    // trigger row (Sentry → repo today; PostHog/PagerDuty → repo later).
+    // stepsCompleted records the names of pipeline steps the run has
+    // finished in order — populated by runPipeline at P3c, currently
+    // empty for legacy worker runs. ctxDir / ctxArchiveS3 point at the
+    // per-run disk context store + its S3 archive (disk-backed ctx
+    // store landing in P3c). wasTruncated records which ctx fields hit
+    // their cap during the run (see DEFAULT_CAP_BYTES).
+    triggerId: uuid("trigger_id"),
+    stepsCompleted: jsonb("steps_completed").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    ctxDir: text("ctx_dir"),
+    ctxArchiveS3: text("ctx_archive_s3"),
+    wasTruncated: jsonb("was_truncated")
+      .$type<Record<string, boolean>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
   },
-  (t) => [index("runs_alert_id_idx").on(t.alertId), index("runs_status_idx").on(t.status)],
+  (t) => [
+    index("runs_alert_id_idx").on(t.alertId),
+    index("runs_status_idx").on(t.status),
+    index("runs_trigger_id_idx").on(t.triggerId),
+  ],
 );
 
 export const prs = pgTable(
@@ -93,6 +114,16 @@ export const prs = pgTable(
     // delivery layer.
     lastReviewedCommentAt: timestamp("last_reviewed_comment_at", { withTimezone: true }),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    // Self-improvement loop V1 (Section 11.1): outcome tracking.
+    // outcome populated by alertforge-cron walking open bot PRs daily
+    // for 14d post-open. reviewCommentsJsonb captures raw review
+    // comments for closed_unmerged PRs — input to V2 reviewer-style
+    // modeling. humanCommits is the count of commits between bot's
+    // first commit and merge (>0 ⇒ merged_with_edits).
+    outcome: text("outcome"),
+    outcomeRecordedAt: timestamp("outcome_recorded_at", { withTimezone: true }),
+    reviewCommentsJsonb: jsonb("review_comments_jsonb"),
+    humanCommits: integer("human_commits").notNull().default(0),
   },
   (t) => [unique("prs_repo_number_unique").on(t.repo, t.number)],
 );
