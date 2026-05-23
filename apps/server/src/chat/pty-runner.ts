@@ -94,7 +94,7 @@ export function spawnClaudeInteractive(input: {
   // because they run unattended; chat is interactive so the per-action
   // approval prompts are fine.
   const claudeModel = env.CLAUDE_MODEL;
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   // Force HOME inside the inner shell — bash --login reads /etc/profile
   // and ~/.profile which can reset HOME to /root if the runuser PAM
   // session set it that way. Re-exporting after profile load guarantees
@@ -110,7 +110,7 @@ export function spawnClaudeInteractive(input: {
   // container mode (runuser sets it from /etc/passwd before exec'ing the
   // server). The login flow writes creds under /alertforge/state/home; readers
   // must point at the same path.
-  extraEnv.HOME = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  extraEnv.HOME = stateHome;
   const handle = spawnPtyCommand({
     cmd: "/bin/bash",
     args: ["-c", initLine],

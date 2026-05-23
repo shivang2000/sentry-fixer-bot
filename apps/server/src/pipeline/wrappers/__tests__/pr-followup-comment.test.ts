@@ -41,7 +41,7 @@ function makePrTarget(overrides: Partial<{ isDraft: boolean; number: number }> =
   return {
     repo: "acme/api",
     number: overrides.number ?? 42,
-    branch: "sfb/r",
+    branch: "alertforge/r",
     url: `https://github.com/acme/api/pull/${overrides.number ?? 42}`,
     isDraft: overrides.isDraft ?? true,
     needsHuman: false,
@@ -65,7 +65,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r3");
     await ctx.write("pr", makePrTarget({ isDraft: true }));
     await ctx.write("instruction", {
-      body: "/sfb apply fix",
+      body: "/alertforge apply fix",
       author: "alice",
       commentId: "c1",
       createdAt: "2026-05-21T00:00:00Z",
@@ -96,7 +96,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r4");
     await ctx.write("pr", makePrTarget({ isDraft: false }));
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "alice",
       commentId: "c2",
       createdAt: "2026-05-21T00:00:00Z",
@@ -123,7 +123,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r5");
     await ctx.write("pr", makePrTarget());
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "alice",
       commentId: "c3",
       createdAt: "2026-05-21T00:00:00Z",
@@ -159,7 +159,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r6");
     await ctx.write("pr", makePrTarget());
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "a",
       commentId: "c4",
       createdAt: "2026-05-21T00:00:00Z",
@@ -185,7 +185,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r7");
     await ctx.write("pr", makePrTarget());
     await ctx.write("instruction", {
-      body: "/sfb foo",
+      body: "/alertforge foo",
       author: "a",
       commentId: "c5",
       createdAt: "2026-05-21T00:00:00Z",
@@ -209,7 +209,7 @@ describe("pr-followup-comment wrapper", () => {
     const ctx = new MemoryCtxStore("r8");
     await ctx.write("pr", makePrTarget());
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "a",
       commentId: "c6",
       createdAt: "2026-05-21T00:00:00Z",

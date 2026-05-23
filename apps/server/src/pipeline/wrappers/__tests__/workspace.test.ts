@@ -50,7 +50,7 @@ describe("workspace wrapper", () => {
         baseBranch: "main",
         createWorkspaceFn: async (input) => {
           captured = { runId: input.runId, repo: input.repo, baseBranch: input.baseBranch };
-          return { dir: "/work/run-2", branch: "sfb/run-2", cleanup: cleanupSpy };
+          return { dir: "/work/run-2", branch: "alertforge/run-2", cleanup: cleanupSpy };
         },
       },
       handle,
@@ -62,7 +62,7 @@ describe("workspace wrapper", () => {
       baseBranch: "main",
     });
     const ws = await ctx.read<{ dir: string; branch: string; baseBranch: string }>("workspace");
-    expect(ws).toEqual({ dir: "/work/run-2", branch: "sfb/run-2", baseBranch: "main" });
+    expect(ws).toEqual({ dir: "/work/run-2", branch: "alertforge/run-2", baseBranch: "main" });
     expect(handle.cleanup).toBe(cleanupSpy);
   });
 

@@ -1,17 +1,15 @@
 /**
  * Resolve the canonical TriggerRow for an AgentJob.
  *
- * P3c.2 strategy: triggers table is sparsely populated (only triggers
- * the operator has explicitly created in /triggers UI land in there).
- * For repos that pre-date the triggers table, we synthesize a
- * TriggerRow from the repos_config row keyed on payload.repo. This
- * keeps existing webhook-driven runs working without requiring an
- * up-front backfill migration; P9 (drop repos_config) will require
- * the backfill but P3c.2 doesn't.
+ * Strategy: the `triggers` table is the canonical pipeline-config
+ * source post-P9; for repos that pre-date `triggers` (synthesised at
+ * the P4 backfill from the old `repos_config`), we still synthesize a
+ * TriggerRow from the `repos` row keyed on payload.repo so a freshly
+ * auto-discovered repo (no triggers row yet) still drives a run.
  *
  * Real triggers (when present) win. The lookup order:
  *   1. triggers row matching (sourceType="sentry", sourceProject=alert.sourceProject)
- *   2. Fall back to synthesizing from repos_config keyed on alert.sourceProject
+ *   2. Fall back to synthesizing from `repos` keyed on alert.sourceProject
  *      OR by github repo (legacy lookup).
  *
  * Returns null when neither path can locate a config — caller marks
@@ -20,7 +18,7 @@
 
 import { DEFAULT_MODELS, type Preset, type TriggerRow } from "@alertforge/core";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { triggers } from "@alertforge/db/schema/triggers";
 import { and, eq } from "drizzle-orm";
 
@@ -32,10 +30,10 @@ export interface ResolveTriggerInput {
 }
 
 /**
- * The legacy `repos_config` row carries the cap, reviewers, default
- * branch, test command override. We re-export the relevant fields
- * alongside the trigger so the worker can pass them into the wrappers
- * without re-querying.
+ * The `repos` row carries the cap, reviewers, default branch, test
+ * command override. We re-export the relevant fields alongside the
+ * trigger so the worker can pass them into the wrappers without
+ * re-querying.
  */
 export interface ResolvedTriggerBundle {
   trigger: TriggerRow;
@@ -59,22 +57,15 @@ export async function resolveTriggerForRun(
     .limit(1);
   const trig = trigRows[0];
 
-  // Look up repos_config either via the trigger's repoId (when we have
-  // a real trigger row) or by github repo string (the legacy lookup).
-  let cfgRow: typeof reposConfig.$inferSelect | undefined;
+  // Look up the `repos` row either via the trigger's repoId (when we
+  // have a real trigger row) or by github repo string (the legacy
+  // lookup for auto-discovered repos without a triggers row yet).
+  let cfgRow: typeof repos.$inferSelect | undefined;
   if (trig) {
-    const cfgRows = await db
-      .select()
-      .from(reposConfig)
-      .where(eq(reposConfig.id, trig.repoId))
-      .limit(1);
+    const cfgRows = await db.select().from(repos).where(eq(repos.id, trig.repoId)).limit(1);
     cfgRow = cfgRows[0];
   } else {
-    const cfgRows = await db
-      .select()
-      .from(reposConfig)
-      .where(eq(reposConfig.github, input.repo))
-      .limit(1);
+    const cfgRows = await db.select().from(repos).where(eq(repos.github, input.repo)).limit(1);
     cfgRow = cfgRows[0];
   }
   if (!cfgRow) return null;
@@ -97,7 +88,7 @@ export async function resolveTriggerForRun(
         updatedAt: trig.updatedAt,
       }
     : {
-        // Synthetic trigger — id mirrors the repos_config id so downstream
+        // Synthetic trigger — id mirrors the `repos` row id so downstream
         // notifications.json + channel_configs lookups have a stable join
         // key without an actual triggers row existing.
         id: cfgRow.id,

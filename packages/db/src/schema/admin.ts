@@ -11,7 +11,16 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
-export const reposConfig = pgTable("repos_config", {
+/**
+ * The canonical repo-identity entity. Renamed from `repos_config` to
+ * `repos` in alertforge-2.1.0 (P9 cleanup); the legacy table name was
+ * carried over from V1 when this row held the entire pipeline config.
+ * Pipeline config now lives on `triggers.config` (jsonb); this row
+ * holds the repo-identity fields the system can't put on a trigger
+ * (github slug, default branch, test command override, reviewers
+ * allowlist, per-repo budget caps).
+ */
+export const repos = pgTable("repos", {
   id: uuid("id").defaultRandom().primaryKey(),
   sentryProject: text("sentry_project").notNull().unique(),
   github: text("github").notNull(),

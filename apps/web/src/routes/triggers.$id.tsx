@@ -252,8 +252,8 @@ function BudgetTab({ triggerId, repoGithub }: { triggerId: string; repoGithub: s
         </CardContent>
       </Card>
       <p className="text-[11px] text-zinc-500">
-        Per-trigger caps land in P8 — until then the repo-level cap on <code>repos_config</code> is
-        the hard ceiling.
+        Per-trigger caps land in P8 — until then the repo-level cap on <code>repos</code> is the
+        hard ceiling.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import { getSentryOrgSlug, getSentryToken } from "@alertforge/api/run/sentry-runner";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { upsertAlert } from "@alertforge/source-sentry";
 import { eq } from "drizzle-orm";
 import { log } from "../log";
@@ -58,18 +58,18 @@ export async function processSentryPollJob(data: { lookbackMinutes?: number } = 
   }
   const lookbackMinutes = data.lookbackMinutes ?? 15;
   const db = createDb();
-  const repos = await db
-    .select({ sentryProject: reposConfig.sentryProject })
-    .from(reposConfig)
-    .where(eq(reposConfig.enabled, true));
+  const enabledRepos = await db
+    .select({ sentryProject: repos.sentryProject })
+    .from(repos)
+    .where(eq(repos.enabled, true));
 
-  if (repos.length === 0) {
+  if (enabledRepos.length === 0) {
     log.info("[sentry-poll] no enabled repos");
     return;
   }
 
   let enqueued = 0;
-  for (const r of repos) {
+  for (const r of enabledRepos) {
     let issues: SentryIssue[];
     try {
       issues = await fetchRecentIssues(r.sentryProject, lookbackMinutes);

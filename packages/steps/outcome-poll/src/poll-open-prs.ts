@@ -20,11 +20,14 @@
 
 import { fetchReviewComments, type ReviewCommentRecord } from "./fetch-review-comments";
 
-/** GitHub App handles we recognise as bot-authored commits. */
-export const BOT_LOGINS: ReadonlySet<string> = new Set([
-  "alertforge[bot]",
-  "sentry-fixer-bot[bot]",
-]);
+/**
+ * GitHub App handle we recognise as bot-authored commits. Legacy
+ * `sentry-fixer-bot[bot]` was dropped in alertforge-2.1.0 (P9); any
+ * lingering legacy-handle commits on still-open PRs will now count as
+ * human commits, which is conservative (over-counts edits, never
+ * under-counts).
+ */
+export const BOT_LOGINS: ReadonlySet<string> = new Set(["alertforge[bot]"]);
 
 /** Days a PR can be open before we declare it stale. */
 export const STALE_THRESHOLD_DAYS = 14;

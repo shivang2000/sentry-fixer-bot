@@ -4,9 +4,9 @@
  *
  * Worker boundary concerns kept here (NOT in steps):
  *   - Idempotency watermark check + advance (lastReviewedCommentAt).
- *     The same /alertforge (or legacy /sfb) comment can arrive via
- *     webhook AND cron within the same minute; watermark advances in
- *     the `finally` so even on failure the comment isn't re-tried.
+ *     The same /alertforge comment can arrive via webhook AND cron
+ *     within the same minute; watermark advances in the `finally` so
+ *     even on failure the comment isn't re-tried.
  *   - humanReviewState UI flip (`in_progress` before pipeline, then
  *     `none` or `waiting_human` after based on outcome).
  *   - The mcpConfigPath render (renderClaudeHome reads installed MCPs
@@ -20,7 +20,7 @@
 
 import { type CtxStore, DiskCtxStore, runPipeline } from "@alertforge/core";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { alerts, prs, runs } from "@alertforge/db/schema/domain";
 import { env } from "@alertforge/env/server";
 import { renderClaudeHome } from "@alertforge/step-fix-agent";
@@ -38,8 +38,7 @@ import { appendRunLog } from "../runs/log";
 const MAX_FOLLOWUP_ATTEMPTS = 3;
 
 /**
- * Process a `/alertforge <instruction>` (or legacy `/sfb`) comment on
- * a PR the bot opened.
+ * Process a `/alertforge <instruction>` comment on a PR the bot opened.
  *
  * Worker structure (P3c.3 flip):
  *   1. Load PR row. Bail on missing.
@@ -63,9 +62,9 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
   }
 
   // Idempotency guard — STAYS in the worker (not in a step).
-  // Same /alertforge (or legacy /sfb) comment can arrive via webhook
-  // AND cron within the same minute; only one should run. Skip before
-  // any expensive ops.
+  // Same /alertforge comment can arrive via webhook AND cron within
+  // the same minute; only one should run. Skip before any expensive
+  // ops.
   if (pr.lastReviewedCommentAt && new Date(job.commentCreatedAt) <= pr.lastReviewedCommentAt) {
     log.info({ prId: job.prId, commentId: job.commentId }, "[pr-followup] older than watermark");
     await appendRunLog({
@@ -84,16 +83,14 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     message: `Picked up /alertforge comment from @${job.commentAuthor} on PR #${pr.number}: ${job.commentBody.slice(0, 200)}`,
   });
 
-  // Load alert title (for the followup prompt) + repos_config (for
+  // Load alert title (for the followup prompt) + `repos` row (for
   // test command override + the trigger lookup fallback). Both
   // optional — the wrappers tolerate missing alert, and the trigger
   // resolver falls back to a synthetic trigger when none exists.
   const alert = (
     await db.select({ title: alerts.title }).from(alerts).where(eq(alerts.id, pr.alertId)).limit(1)
   )[0];
-  const cfgRow = (
-    await db.select().from(reposConfig).where(eq(reposConfig.github, pr.repo)).limit(1)
-  )[0];
+  const cfgRow = (await db.select().from(repos).where(eq(repos.github, pr.repo)).limit(1))[0];
   if (!cfgRow) {
     log.warn({ repo: pr.repo }, "[pr-followup] repo config missing");
     return;
@@ -136,10 +133,11 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     });
   }
 
-  // Re-attach to whatever branch the original run recorded — preserves
-  // back-compat with legacy `sfb/<runId>` branches opened before P7.
-  // Falls back to the new `alertforge/<runId>` shape if the runs row
-  // somehow has no branch column populated (legacy schema).
+  // Re-attach to whatever branch the original run recorded. The
+  // runs.branch column carries the actual branch name verbatim (e.g.
+  // `alertforge/<runId>` for new runs, `sfb/<runId>` for legacy pre-P7
+  // runs that are still attached to open PRs). attachWorkspace just
+  // clones by branch name, so any prefix shape round-trips cleanly.
   const runRow = (
     await db.select({ branch: runs.branch }).from(runs).where(eq(runs.id, pr.runId)).limit(1)
   )[0];

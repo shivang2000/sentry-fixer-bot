@@ -207,8 +207,8 @@ export interface S3PutClient {
 
 /**
  * Thin DB surface used by wrappers when they need to read/write rows
- * outside the ctx store (channel_configs lookup, prs insert, repos_config
- * read for legacy budget interop). Wrappers receive the project's actual
+ * outside the ctx store (channel_configs lookup, prs insert, `repos`
+ * read for budget interop). Wrappers receive the project's actual
  * drizzle client through this opaque slot; tests inject a stub. Typed as
  * `unknown` here to keep alertforge-core free of drizzle types — consumers
  * cast at the wrapper boundary.

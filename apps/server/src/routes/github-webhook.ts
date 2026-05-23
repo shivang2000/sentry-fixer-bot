@@ -1,6 +1,6 @@
 import { verifyHmacSha256 } from "@alertforge/core";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { prs } from "@alertforge/db/schema/domain";
 import { env } from "@alertforge/env/server";
 import { and, eq } from "drizzle-orm";
@@ -17,23 +17,15 @@ export const githubWebhook = new Hono();
  * is treated as ordinary conversation and ignored — same pattern as
  * Dependabot/Renovate (`@dependabot rebase`).
  *
- * `/alertforge` is the canonical post-rename prefix. `/sfb` is kept as
- * an alias during the 2.0.x back-compat window so existing reviewer
- * muscle-memory keeps working. Removed in alertforge-2.1.0 (P9).
+ * The legacy `/sfb` alias was dropped in alertforge-2.1.0 (P9); only
+ * `/alertforge` matches now.
  */
 export const ALERTFORGE_COMMAND_PREFIX = "/alertforge";
-export const SFB_COMMAND_PREFIX = "/sfb";
-const COMMAND_PREFIX_RE = /^\/(sfb|alertforge)\b/i;
+const COMMAND_PREFIX_RE = /^\/alertforge\b/i;
 
 export function isAlertforgeCommand(body: string): boolean {
   return COMMAND_PREFIX_RE.test(body.trim());
 }
-
-/**
- * Back-compat alias. Removed in alertforge-2.1.0 (P9). New callers use
- * `isAlertforgeCommand`.
- */
-export const isSfbCommand = isAlertforgeCommand;
 
 type IssueCommentEvent = {
   action: "created" | "edited" | "deleted";
@@ -61,8 +53,8 @@ type IssueCommentEvent = {
  * Flow:
  *   1. Verify X-Hub-Signature-256 against GITHUB_WEBHOOK_SECRET.
  *   2. Filter to `action === "created"` on a PR comment.
- *   3. Require `/alertforge` (or legacy `/sfb`) prefix on body.
- *   4. Require sender to be in `reposConfig.prReviewers` for the repo.
+ *   3. Require `/alertforge` prefix on body.
+ *   4. Require sender to be in `repos.prReviewers` for the repo.
  *   5. Look up the prs row by (repo, number); require it to exist
  *      (i.e. PR was opened by alertforge) and be in `waiting_human` state.
  *   6. Enqueue a JOB_PR_FOLLOWUP with the comment payload.
@@ -138,9 +130,9 @@ export async function dispatchPrComment(input: {
 
   const db = createDb();
   const cfgRows = await db
-    .select({ prReviewers: reposConfig.prReviewers })
-    .from(reposConfig)
-    .where(eq(reposConfig.github, input.repo))
+    .select({ prReviewers: repos.prReviewers })
+    .from(repos)
+    .where(eq(repos.github, input.repo))
     .limit(1);
   const cfg = cfgRows[0];
   if (!cfg) return { ignored: "no_repo_config" };
@@ -148,8 +140,8 @@ export async function dispatchPrComment(input: {
   // Empty allow-list = "no allow-list" → anyone can drive /alertforge.
   // This is the right default for solo operators who don't want to
   // maintain a list. As soon as the operator adds even one entry to
-  // reposConfig.prReviewers, the gate becomes strict: only listed
-  // GitHub usernames can issue /alertforge (or legacy /sfb) commands.
+  // repos.prReviewers, the gate becomes strict: only listed GitHub
+  // usernames can issue /alertforge commands.
   if (cfg.prReviewers.length > 0 && !cfg.prReviewers.includes(input.comment.author)) {
     log.info(
       { repo: input.repo, author: input.comment.author },

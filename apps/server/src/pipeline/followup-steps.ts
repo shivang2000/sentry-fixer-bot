@@ -54,7 +54,7 @@ export interface BuildFollowupStepsInput {
   repo: string;
   /** PR number on GitHub. */
   prNumber: number;
-  /** Existing PR branch (sfb/<originalRunId>). */
+  /** Existing PR branch (alertforge/<originalRunId>, or legacy sfb/<originalRunId> for pre-P7 PRs). */
   prBranch: string;
   /** Side-channel the wrappers share; the worker passes one in so the
    *  `finally` block can read final state if needed. */

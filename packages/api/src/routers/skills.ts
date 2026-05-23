@@ -12,9 +12,9 @@ import { SKILLS_CATALOG } from "../skills-catalog";
 import { safeExtractZip, validateZipBuffer } from "../skills-zip";
 
 function defaultSkillsDir(): string {
-  const explicit = process.env.ALERTFORGE_SKILLS_DIR ?? process.env.SFB_SKILLS_DIR;
+  const explicit = process.env.ALERTFORGE_SKILLS_DIR;
   if (explicit) return explicit;
-  const state = process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR;
+  const state = process.env.ALERTFORGE_STATE_DIR;
   if (state) return `${state}/skills`;
   return "/var/lib/alertforge/skills";
 }

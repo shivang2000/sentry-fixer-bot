@@ -13,7 +13,6 @@ import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import "./register-adapters";
 import { bootstrapDefaults } from "./bootstrap-defaults";
-import { applyLegacyPathSymlinks } from "./legacy-path-symlinks";
 import { boardClaim } from "./routes/board-claim";
 import { chatWs, websocket } from "./routes/chat-ws";
 import { githubWebhook } from "./routes/github-webhook";
@@ -24,13 +23,6 @@ initLogger({
   env: { service: "alertforge-server" },
 });
 
-// One-release back-compat: create symlinks /var/lib/sfb → /var/lib/alertforge
-// and similar so operators still running scripts that reference the old
-// paths see consistent state during cutover. Idempotent + tolerates
-// EACCES, so it's safe in container/dev modes where the server doesn't
-// own /var or /etc. Removed in alertforge-2.1.0 (P9).
-await applyLegacyPathSymlinks();
-
 await bootstrapLocalTrustedAdmin();
 await runStartupDoctor();
 await maybeEmitClaimUrl();
@@ -40,7 +32,7 @@ await bootstrapDefaults();
 // loop in-band. pg-boss handlers + the Sentry-poll cron all hang off the
 // same boss instance the webhook handler publishes to. EC2 mode keeps the
 // dedicated alertforge-worker.service.
-if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
+if (process.env.ALERTFORGE_RUN_MODE === "container") {
   await import("./worker/index");
 }
 

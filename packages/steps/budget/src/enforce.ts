@@ -1,5 +1,5 @@
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { budgets } from "@alertforge/db/schema/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { type BudgetCheck, decideBudget } from "./decide";
@@ -11,10 +11,10 @@ function today(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-/** Read caps from repos_config, read today's budget row, decide. */
+/** Read caps from `repos`, read today's budget row, decide. */
 export async function checkRepoBudget(repo: string): Promise<BudgetCheck> {
   const db = createDb();
-  const cfgRows = await db.select().from(reposConfig).where(eq(reposConfig.github, repo)).limit(1);
+  const cfgRows = await db.select().from(repos).where(eq(repos.github, repo)).limit(1);
   const cfg = cfgRows[0];
   if (!cfg) return { allowed: true }; // unknown repo: caller handles routing
 

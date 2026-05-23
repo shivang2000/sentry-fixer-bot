@@ -1,13 +1,13 @@
 /**
  * Unit tests for followup-fix-agent wrapper. Verifies:
  *   - skipIf true when cfg.stopAfter='budget' or prGuardHandle.terminated.
- *   - Renders the legacy followup prompt verbatim (stripSfbPrefix +
+ *   - Renders the legacy followup prompt verbatim (stripCommandPrefix +
  *     `/sentry-cli` header + alert title + instruction body).
  *   - Single spawn when tests pass; multiple spawns when they fail
  *     until maxAttempts.
  *   - testRecorder side-channel populated with final state.
  *   - Throws when ctx.workspace or ctx.instruction is missing.
- *   - stripSfbPrefix strips `/sfb` prefix case-insensitively.
+ *   - stripCommandPrefix strips `/alertforge` prefix case-insensitively.
  */
 
 import "../../__tests__/env-preload";
@@ -25,7 +25,7 @@ import {
   renderFollowupPrompt,
   runFollowupFixAgentStep,
   skipFollowupFixAgentIfFactory,
-  stripSfbPrefix,
+  stripCommandPrefix,
   wrapFollowupFixAgentStep,
 } from "../followup-fix-agent";
 
@@ -70,7 +70,7 @@ describe("followup-fix-agent wrapper", () => {
     await ctx.write("workspace", { dir: "/w", branch: "br", baseBranch: "" });
     await ctx.write("alert", SAMPLE_ALERT);
     await ctx.write("instruction", {
-      body: "/sfb add null check",
+      body: "/alertforge add null check",
       author: "alice",
       commentId: "1",
       createdAt: "2026-05-21T00:00:00Z",
@@ -109,7 +109,7 @@ describe("followup-fix-agent wrapper", () => {
     await ctx.write("workspace", { dir: "/w", branch: "br", baseBranch: "" });
     await ctx.write("alert", SAMPLE_ALERT);
     await ctx.write("instruction", {
-      body: "/sfb make it pass",
+      body: "/alertforge make it pass",
       author: "bob",
       commentId: "2",
       createdAt: "2026-05-21T00:00:00Z",
@@ -150,7 +150,7 @@ describe("followup-fix-agent wrapper", () => {
     await ctx.write("workspace", { dir: "/w", branch: "br", baseBranch: "" });
     await ctx.write("alert", SAMPLE_ALERT);
     await ctx.write("instruction", {
-      body: "/sfb",
+      body: "/alertforge",
       author: "carol",
       commentId: "3",
       createdAt: "2026-05-21T00:00:00Z",
@@ -187,7 +187,7 @@ describe("followup-fix-agent wrapper", () => {
     await ctx.write("workspace", { dir: "/w", branch: "br", baseBranch: "" });
     await ctx.write("alert", SAMPLE_ALERT);
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "d",
       commentId: "4",
       createdAt: "2026-05-21T00:00:00Z",
@@ -220,7 +220,7 @@ describe("followup-fix-agent wrapper", () => {
     const ctx = new MemoryCtxStore("r7");
     await ctx.write("alert", SAMPLE_ALERT);
     await ctx.write("instruction", {
-      body: "/sfb x",
+      body: "/alertforge x",
       author: "d",
       commentId: "5",
       createdAt: "2026-05-21T00:00:00Z",
@@ -249,11 +249,13 @@ describe("followup-fix-agent wrapper", () => {
     ).rejects.toThrow(/instruction/);
   });
 
-  it("stripSfbPrefix strips the /sfb prefix case-insensitively", () => {
-    expect(stripSfbPrefix("/sfb foo")).toBe("foo");
-    expect(stripSfbPrefix("/SFB foo")).toBe("foo");
-    expect(stripSfbPrefix("   /sfb   bar  ")).toBe("bar");
-    expect(stripSfbPrefix("no prefix")).toBe("no prefix");
+  it("stripCommandPrefix strips the /alertforge prefix case-insensitively", () => {
+    expect(stripCommandPrefix("/alertforge foo")).toBe("foo");
+    expect(stripCommandPrefix("/ALERTFORGE foo")).toBe("foo");
+    expect(stripCommandPrefix("   /alertforge   bar  ")).toBe("bar");
+    expect(stripCommandPrefix("no prefix")).toBe("no prefix");
+    // Legacy `/sfb` is no longer stripped (P9 drop).
+    expect(stripCommandPrefix("/sfb foo")).toBe("/sfb foo");
   });
 
   it("renderFollowupPrompt embeds reviewer + alert + instruction", () => {

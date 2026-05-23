@@ -56,7 +56,7 @@ export interface WrapOpenPrOpts {
   openPrFn?: OpenPrFn;
   /** owner/name from the AgentJob payload. */
   repo: string;
-  /** From repos_config.prReviewers, threaded through by deps-factory. */
+  /** From `repos.prReviewers`, threaded through by deps-factory. */
   reviewers?: string[];
 }
 
@@ -88,7 +88,7 @@ export async function runOpenPrStep(
   const isDraft = (secretScan && secretScan.findings.length > 0) || testResult?.passed === false;
   const needsHuman = secretScan ? secretScan.findings.length > 0 : false;
 
-  const title = `sfb: ${alert.title.slice(0, 100)}`;
+  const title = `alertforge: ${alert.title.slice(0, 100)}`;
   const body = renderPrBody({
     alert: alert.title,
     problem: agentOutput.problem,

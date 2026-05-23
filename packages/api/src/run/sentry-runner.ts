@@ -24,14 +24,14 @@ type BunGlobal = {
 const BunRuntime = (globalThis as unknown as { Bun: BunGlobal }).Bun;
 
 function sentryBin(): string {
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   return `${stateHome}/.sentry/bin/sentry`;
 }
 
 async function sentry(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   const proc = BunRuntime.spawn([sentryBin(), ...args], {
     cwd: stateHome,
     env: { ...process.env, HOME: stateHome },

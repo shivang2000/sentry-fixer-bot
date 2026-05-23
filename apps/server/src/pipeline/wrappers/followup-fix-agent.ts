@@ -5,8 +5,8 @@
  *   1. Prompt content — the primary path renders a fresh agent prompt
  *      from the alert + stack trace; the followup path renders a
  *      reviewer-instruction prompt (alert title + the reviewer's
- *      `/alertforge` or legacy `/sfb` body). Legacy `renderFollowupPrompt`
- *      in pr-followup-job.ts is the source of truth; we preserve it
+ *      `/alertforge` body). Legacy `renderFollowupPrompt` in
+ *      pr-followup-job.ts is the source of truth; we preserve it
  *      verbatim here.
  *   2. Stream source tag — `followup-stream` instead of `agent-stream`
  *      so /runs/<id> can distinguish the followup pass from the
@@ -67,7 +67,7 @@ export interface WrapFollowupFixAgentOpts {
   runRepoTestsFn?: RunRepoTestsFn;
   /** Side-channel for test-gate to read the final test attempt result. */
   testRecorder: TestRecorder;
-  /** Test command override from repos_config; legacy parity. */
+  /** Test command override from repos.test_command (per-repo override). */
   testCommandOverride?: string | null;
   /** Pre-rendered claude home + mcp config. None in tests. */
   mcpConfigPath?: string;
@@ -136,7 +136,7 @@ export async function runFollowupFixAgentStep(
   const basePrompt = renderFollowupPrompt({
     alertTitle: alert?.title ?? "(unknown)",
     reviewer: instruction.author,
-    instruction: stripSfbPrefix(instruction.body),
+    instruction: stripCommandPrefix(instruction.body),
     testCommand: resolvedTest?.command ?? null,
   });
 
@@ -259,23 +259,15 @@ export function wrapFollowupFixAgentStep(opts: WrapFollowupFixAgentOpts): Pipeli
 // ---------- helpers ----------
 
 /**
- * Strip the leading `/alertforge` or legacy `/sfb` so claude doesn't
- * see its own dispatch prefix. Recognises both prefixes during the
- * 2.0.x back-compat window; P9 drops the legacy arm.
- *
- * Exported as `stripSfbPrefix` for back-compat (callers across the
- * codebase use that name); new code should prefer the alias
- * `stripCommandPrefix` defined below.
+ * Strip the leading `/alertforge` so claude doesn't see its own
+ * dispatch prefix. Legacy `/sfb` was dropped in alertforge-2.1.0 (P9).
  */
-export function stripSfbPrefix(body: string): string {
+export function stripCommandPrefix(body: string): string {
   return body
     .trim()
-    .replace(/^\/(?:sfb|alertforge)\s*/i, "")
+    .replace(/^\/alertforge\s*/i, "")
     .trim();
 }
-
-/** Forward-looking name for stripSfbPrefix. */
-export const stripCommandPrefix = stripSfbPrefix;
 
 /**
  * Preserved verbatim from legacy `renderFollowupPrompt` in

@@ -1,14 +1,14 @@
 /**
- * Idempotent seed for local dev: inserts a single demo `repos_config` row.
+ * Idempotent seed for local dev: inserts a single demo `repos` row.
  * Run via `bun run db:seed` (script registered in package.json).
  */
 import { createDb } from "./index";
-import { reposConfig } from "./schema/admin";
+import { repos } from "./schema/admin";
 
 async function main(): Promise<void> {
   const db = createDb();
   await db
-    .insert(reposConfig)
+    .insert(repos)
     .values({
       sentryProject: "demo-app",
       github: "your-org/demo-app",
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
       dailyCostCapCents: 2500,
       minSeverityToFix: "medium",
     })
-    .onConflictDoNothing({ target: reposConfig.sentryProject });
+    .onConflictDoNothing({ target: repos.sentryProject });
   console.log("seed applied");
 }
 

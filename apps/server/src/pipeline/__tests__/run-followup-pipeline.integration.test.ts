@@ -1,7 +1,7 @@
 /**
  * Integration test for the FOLLOWUP_STEPS pipeline driven by
  * `runPipeline`. The follow-up pipeline runs when a human reviewer
- * leaves a `/sfb <instruction>` comment on a PR the bot opened; the
+ * leaves a `/alertforge <instruction>` comment on a PR the bot opened; the
  * worker re-attaches a worktree to the PR's existing branch, spawns
  * claude with the reviewer's instruction, gates on tests, and pushes
  * to the existing branch (no new PR).
@@ -63,7 +63,7 @@ function makePrTarget(overrides: Partial<{ number: number; branch: string; repo:
 
 function makeInstruction(overrides: Partial<{ body: string; author: string }> = {}) {
   return {
-    body: overrides.body ?? "/sfb fix the null check",
+    body: overrides.body ?? "/alertforge fix the null check",
     author: overrides.author ?? "alice",
     commentId: "12345",
     createdAt: "2026-05-21T10:00:00Z",

@@ -57,12 +57,12 @@ describe("commit-push-only wrapper", () => {
 
   it("dirty tree → runs add + commit + push; outcome.pushed=true", async () => {
     const ctx = new MemoryCtxStore("r4");
-    await ctx.write("workspace", { dir: "/w", branch: "sfb/r-orig", baseBranch: "" });
+    await ctx.write("workspace", { dir: "/w", branch: "alertforge/r-orig", baseBranch: "" });
     await ctx.write("agent_output", { exitCode: 0 });
     await ctx.write("test_result", { passed: true });
     await ctx.write("secret_scan", { findings: [], blocked: false });
     await ctx.write("instruction", {
-      body: "/sfb add a check",
+      body: "/alertforge add a check",
       author: "alice",
       commentId: "c1",
       createdAt: "2026-05-21T00:00:00Z",

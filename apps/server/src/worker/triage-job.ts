@@ -1,5 +1,5 @@
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { alerts } from "@alertforge/db/schema/domain";
 import { extractStackTrace, getLatestEvent, postIssueComment } from "@alertforge/source-sentry";
 import { classify } from "@alertforge/step-classify";
@@ -31,12 +31,12 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
 
   const cfgRows = await db
     .select()
-    .from(reposConfig)
-    .where(eq(reposConfig.sentryProject, alert.sentryProject))
+    .from(repos)
+    .where(eq(repos.sentryProject, alert.sentryProject))
     .limit(1);
   let cfg: (typeof cfgRows)[number] | undefined = cfgRows[0];
 
-  // Auto-discover: if no repos_config row, gh-search the slug and
+  // Auto-discover: if no `repos` row, gh-search the slug and
   // insert a sensible default. Operator can edit later via /repos.
   if (!cfg) {
     const created = await resolveOrCreateRepoConfig(alert.sentryProject).catch((e) => {
@@ -48,11 +48,7 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     });
     if (created) {
       log.info({ project: alert.sentryProject, github: created.github }, "repo auto-registered");
-      const fresh = await db
-        .select()
-        .from(reposConfig)
-        .where(eq(reposConfig.id, created.id))
-        .limit(1);
+      const fresh = await db.select().from(repos).where(eq(repos.id, created.id)).limit(1);
       cfg = fresh[0];
     }
   }
@@ -76,7 +72,7 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
       runId,
       level: "info",
       source: "triage",
-      message: `Matched repos_config row → ${cfg.github} (branch ${cfg.defaultBranch})`,
+      message: `Matched repo → ${cfg.github} (branch ${cfg.defaultBranch})`,
     });
   }
 
@@ -138,11 +134,11 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
       runId,
       level: "warn",
       source: "triage",
-      message: `No repos_config row for project "${alert.sentryProject}" and gh search returned no candidate. Skipping agent run.`,
+      message: `No repo configured for project "${alert.sentryProject}" and gh search returned no candidate. Skipping agent run.`,
     });
     await postIssueComment(
       alert.sentryIssueId,
-      `alertforge: project "${alert.sentryProject}" is not in repos_config — add it to enable agent fixes.`,
+      `alertforge: project "${alert.sentryProject}" has no repo configured — add it to /repos to enable agent fixes.`,
     );
     await updateRun(runId, { status: "no_repo_match", endedAt: new Date() });
     return;

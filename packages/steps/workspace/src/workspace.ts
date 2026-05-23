@@ -19,7 +19,7 @@ export type ResolveGithubToken = () => Promise<string>;
 function cacheDirFor(repo: string): string {
   // /alertforge/state/repos/<owner>__<name>.git — bare-ish working clone,
   // reused across runs. Per-run worktree branches off this.
-  const base = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/repos`;
+  const base = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/repos`;
   return join(base, repo.replace("/", "__"));
 }
 
@@ -65,9 +65,10 @@ export async function createWorkspace(input: {
   const token = await input.resolveToken();
   const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
   const cache = cacheDirFor(input.repo);
-  // alertforge/<runId> is the canonical post-rename prefix. Legacy
+  // alertforge/<runId> is the canonical branch prefix. Legacy
   // `sfb/<runId>` branches opened by the bot before P7 still re-attach
-  // correctly via attachWorkspace (which just uses input.branch verbatim).
+  // correctly via attachWorkspace (which clones by branch name verbatim,
+  // independent of any prefix scheme).
   const branch = `alertforge/${input.runId}`;
   const dir = join(env.WORK_DIR, input.runId);
 
@@ -127,13 +128,15 @@ export async function createWorkspace(input: {
 
 /**
  * Re-attach a worktree to an EXISTING branch in the cached clone. Used
- * by the pr-followup worker: a human reviewer left an `/alertforge` (or
- * legacy `/sfb`) comment on a PR the bot opened, and we need to apply
- * more changes to the same branch. The branch ref was preserved by
- * `createWorkspace`'s cleanup (worktree removed, branch kept).
+ * by the pr-followup worker: a human reviewer left an `/alertforge`
+ * comment on a PR the bot opened, and we need to apply more changes to
+ * the same branch. The branch ref was preserved by `createWorkspace`'s
+ * cleanup (worktree removed, branch kept).
  *
  * The input.branch is whatever was recorded on the prs row, so legacy
- * `sfb/<runId>` and new `alertforge/<runId>` both round-trip cleanly.
+ * `sfb/<runId>` branches from pre-P7 still round-trip cleanly alongside
+ * the canonical `alertforge/<runId>` shape — this fn clones by branch
+ * name verbatim, with no prefix logic.
  *
  * Fetches origin first so we pick up anything pushed to the branch
  * upstream since the original run.

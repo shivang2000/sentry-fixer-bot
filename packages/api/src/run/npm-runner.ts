@@ -114,9 +114,7 @@ export async function runCommand(input: {
   }
   assertAllowed(argv);
 
-  const cwd =
-    input.cwd ??
-    `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const cwd = input.cwd ?? `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const proc = BunRuntime.spawn(argv, {
@@ -124,8 +122,8 @@ export async function runCommand(input: {
     env: {
       ...process.env,
       // Force npm to write into the state-volume cache so installs persist.
-      NPM_CONFIG_CACHE: `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home/.npm`,
-      HOME: `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`,
+      NPM_CONFIG_CACHE: `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home/.npm`,
+      HOME: `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`,
       ...(input.extraEnv ?? {}),
     },
     stdout: "pipe",

@@ -1,5 +1,5 @@
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 
 type SpawnedProc = {
   stdout?: ReadableStream<Uint8Array>;
@@ -27,7 +27,7 @@ const Bun = (globalThis as unknown as { Bun: BunG }).Bun;
 async function ghSearchRepo(
   slug: string,
 ): Promise<{ nameWithOwner: string; defaultBranch: string } | null> {
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   // `gh search repos` JSON exposes `fullName` (owner/repo) — not the
   // `nameWithOwner` field that `gh repo list` uses. Same data, just
   // a different key. Defensive: also accept nameWithOwner if a future
@@ -62,7 +62,7 @@ async function ghSearchRepo(
 }
 
 /**
- * Resolve a Sentry project slug to a repos_config row, auto-inserting
+ * Resolve a Sentry project slug to a `repos` row, auto-inserting
  * one when gh can find a matching repo. Returns null when no plausible
  * GitHub repo is found — caller falls back to no_repo_match.
  */
@@ -82,7 +82,7 @@ export async function resolveOrCreateRepoConfig(sentryProject: string): Promise<
   const hit = await ghSearchRepo(sentryProject);
   if (!hit) return null;
   const inserted = await db
-    .insert(reposConfig)
+    .insert(repos)
     .values({
       sentryProject,
       github: hit.nameWithOwner,

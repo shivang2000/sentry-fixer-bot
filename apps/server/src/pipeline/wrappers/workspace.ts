@@ -49,7 +49,7 @@ export interface WrapWorkspaceOpts {
   runId: string;
   /** owner/name repo string from the AgentJob. */
   repo: string;
-  /** baseBranch from repos_config; deps-factory looks it up at the worker boundary. */
+  /** baseBranch from `repos`; deps-factory looks it up at the worker boundary. */
   baseBranch: string;
 }
 

@@ -8,21 +8,16 @@ const DEV_FILE = "apps/server/.env.local";
 
 function targetFile(): string {
   // Container mode puts the env file on the state volume so it survives a
-  // restart. Honour an explicit ALERTFORGE_ENV_FILE (or legacy SFB_ENV_FILE)
-  // override (setup.sh sets it), otherwise default to /alertforge/state/etc/env.
-  if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
-    return (
-      process.env.ALERTFORGE_ENV_FILE ?? process.env.SFB_ENV_FILE ?? "/alertforge/state/etc/env"
-    );
+  // restart. Honour an explicit ALERTFORGE_ENV_FILE override (setup.sh
+  // sets it), otherwise default to /alertforge/state/etc/env.
+  if (process.env.ALERTFORGE_RUN_MODE === "container") {
+    return process.env.ALERTFORGE_ENV_FILE ?? "/alertforge/state/etc/env";
   }
   return env.NODE_ENV === "production" ? PROD_FILE : DEV_FILE;
 }
 
 function shouldReloadSystemd(): boolean {
-  return (
-    env.NODE_ENV === "production" &&
-    (process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) !== "container"
-  );
+  return env.NODE_ENV === "production" && process.env.ALERTFORGE_RUN_MODE !== "container";
 }
 
 /**

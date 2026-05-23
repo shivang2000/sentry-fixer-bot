@@ -20,7 +20,7 @@ export async function classify(input: {
   title: string;
   stackTrace: string;
 }): Promise<TriageResult> {
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
   const prompt = `${SYSTEM_PROMPT}\n\nTITLE:\n${input.title}\n\nSTACK:\n${input.stackTrace}`;
 
   const proc = Bun.spawn(

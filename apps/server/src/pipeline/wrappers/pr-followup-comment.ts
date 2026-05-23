@@ -29,7 +29,7 @@ import type { CtxStore, PipelineStep, ResolvedConfig, StepDeps } from "@alertfor
 import type { CommitPushOnlyHandle } from "./commit-push-only";
 import type { AgentOutput } from "./fix-agent";
 import type { InstructionCtxValue } from "./followup-fix-agent";
-import { stripSfbPrefix } from "./followup-fix-agent";
+import { stripCommandPrefix } from "./followup-fix-agent";
 import type { FollowupPrCtxValue, PrGuardHandle } from "./pr-guard";
 import type { SecretScanCtxValue } from "./secret-scan";
 import type { TestResultCtxValue } from "./test-gate";
@@ -75,7 +75,7 @@ export async function runPrFollowupCommentStep(
   }
   const outcome = opts.outcomeHandle.outcome;
   const instruction = await ctx.read<InstructionCtxValue>("instruction");
-  const instructionText = instruction ? stripSfbPrefix(instruction.body) : "";
+  const instructionText = instruction ? stripCommandPrefix(instruction.body) : "";
   const reviewer = instruction?.author ?? "reviewer";
 
   // Successful push: mark ready + post applied comment.
@@ -141,7 +141,7 @@ export async function runPrFollowupCommentStep(
       await opts.commentOnPrFn({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🤖 alertforge: ran your \`/alertforge\` instruction but the agent didn't produce any diff. Try a more specific instruction (e.g. \`/alertforge add a null check in src/foo.ts before line 42\`). Legacy \`/sfb\` prefix still accepted during 2.0.x.`,
+        body: `🤖 alertforge: ran your \`/alertforge\` instruction but the agent didn't produce any diff. Try a more specific instruction (e.g. \`/alertforge add a null check in src/foo.ts before line 42\`).`,
       });
       break;
     }

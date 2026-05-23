@@ -21,7 +21,7 @@ export type ResolvedTest = {
  * Resolve the test command for a workspace.
  *
  * Priority:
- *   1. Operator override (`reposConfig.testCommand`) — wins unconditionally.
+ *   1. Operator override (`repos.testCommand`) — wins unconditionally.
  *   2. Auto-detect by inspecting the worktree's project files. We support
  *      the major language ecosystems out-of-the-box so this works as an
  *      open-source product, not just on Node repos.

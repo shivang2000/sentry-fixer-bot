@@ -96,9 +96,8 @@ function SettingsPage() {
       <header>
         <h1 className="font-semibold text-xl">Settings</h1>
         <p className="text-sm text-zinc-500">
-          Pasted values are written to /etc/alertforge/env (with legacy /etc/sfb/env symlinked for
-          back-compat during 2.0.x), or apps/server/.env.local in dev, and picked up by the next
-          subprocess spawn.
+          Pasted values are written to /etc/alertforge/env, or apps/server/.env.local in dev, and
+          picked up by the next subprocess spawn.
         </p>
       </header>
 

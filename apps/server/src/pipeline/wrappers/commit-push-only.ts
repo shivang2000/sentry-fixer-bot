@@ -39,7 +39,7 @@ import type { CtxStore, PipelineStep, ResolvedConfig, StepDeps } from "@alertfor
 import { type RunCommandFn, runCommand } from "../spawn";
 import type { AgentOutput } from "./fix-agent";
 import type { InstructionCtxValue } from "./followup-fix-agent";
-import { stripSfbPrefix } from "./followup-fix-agent";
+import { stripCommandPrefix } from "./followup-fix-agent";
 import type { PrGuardHandle } from "./pr-guard";
 import type { SecretScanCtxValue } from "./secret-scan";
 import type { TestResultCtxValue } from "./test-gate";
@@ -139,8 +139,8 @@ export async function runCommitPushOnlyStep(
 
   const instruction = await ctx.read<InstructionCtxValue>("instruction");
   const reviewerHandle = instruction?.author ?? "reviewer";
-  const instrText = instruction ? stripSfbPrefix(instruction.body) : "(empty)";
-  const commitMsg = `sfb followup: ${instrText.slice(0, 80)}\n\nApplied per @${reviewerHandle}.`;
+  const instrText = instruction ? stripCommandPrefix(instruction.body) : "(empty)";
+  const commitMsg = `alertforge followup: ${instrText.slice(0, 80)}\n\nApplied per @${reviewerHandle}.`;
 
   await cmdFn(["git", "add", "-A"], { cwd: workspace.dir });
   // Legacy parity: commit identity matches what's in

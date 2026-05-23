@@ -1,5 +1,5 @@
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../index";
@@ -46,7 +46,7 @@ export const ghRouter = router({
 
   addRepos: adminProcedure.input(AddInput).mutation(async ({ input, ctx }) => {
     const db = createDb();
-    const existing = await db.select({ github: reposConfig.github }).from(reposConfig);
+    const existing = await db.select({ github: repos.github }).from(repos);
     const have = new Set(existing.map((r) => r.github));
 
     const toInsert = input.repos
@@ -65,7 +65,7 @@ export const ghRouter = router({
       }));
 
     if (toInsert.length === 0) return { inserted: 0, skipped: input.repos.length };
-    const inserted = await db.insert(reposConfig).values(toInsert).returning();
+    const inserted = await db.insert(repos).values(toInsert).returning();
     return { inserted: inserted.length, skipped: input.repos.length - inserted.length };
   }),
 });

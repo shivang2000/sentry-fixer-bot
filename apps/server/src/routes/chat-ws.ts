@@ -20,8 +20,7 @@ export const chatWs = new Hono();
 function workDirFor(_sessionId: string): string {
   return (
     process.env.ALERTFORGE_CHAT_DIR ??
-    process.env.SFB_CHAT_DIR ??
-    `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/dev`
+    `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/dev`
   );
 }
 
@@ -184,9 +183,8 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
   // (.claude/, .config/gh/, .sentry/, .sentryclirc) persist across
   // container recreations. bun's inherited process.env.HOME is /root
   // (runuser populates HOME from /etc/passwd in container mode), so we
-  // can't fall back to it — always compute from ALERTFORGE_STATE_DIR
-  // (with legacy SFB_STATE_DIR honoured for one release).
-  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
+  // can't fall back to it — always compute from ALERTFORGE_STATE_DIR.
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? "/alertforge/state"}/home`;
 
   if (provider === "claude") {
     // `claude auth login` is the CLI's documented user-facing OAuth

@@ -14,7 +14,7 @@
 
 import { registry } from "@alertforge/core";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { alerts, prs, runs } from "@alertforge/db/schema/domain";
 import { channelConfigs, triggers } from "@alertforge/db/schema/triggers";
 import {
@@ -46,11 +46,11 @@ function makeDbAdapter(): DailyDigestDb {
           name: triggers.name,
           enabled: triggers.enabled,
           sourceProject: triggers.sourceProject,
-          repoGithub: reposConfig.github,
-          capCents: reposConfig.dailyCostCapCents,
+          repoGithub: repos.github,
+          capCents: repos.dailyCostCapCents,
         })
         .from(triggers)
-        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId));
+        .innerJoin(repos, eq(repos.id, triggers.repoId));
 
       const triggerIds = triggerRows.map((t) => t.id);
       // No triggers → no channels query needed.
@@ -160,10 +160,10 @@ function makeDbAdapter(): DailyDigestDb {
       // above but we don't have it here — query directly.
       const trig = await db
         .select({
-          capCents: reposConfig.dailyCostCapCents,
+          capCents: repos.dailyCostCapCents,
         })
         .from(triggers)
-        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+        .innerJoin(repos, eq(repos.id, triggers.repoId))
         .where(eq(triggers.id, triggerId))
         .limit(1);
       const capCents = trig[0]?.capCents ?? 0;

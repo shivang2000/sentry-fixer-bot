@@ -331,8 +331,7 @@ function GithubWebhookCard() {
       description={
         <>
           Optional. Lets reviewers say{" "}
-          <code className="rounded bg-zinc-800 px-1">/alertforge apply</code> (legacy{" "}
-          <code className="rounded bg-zinc-800 px-1">/sfb</code> still accepted) on a PR comment and
+          <code className="rounded bg-zinc-800 px-1">/alertforge apply</code> on a PR comment and
           have the bot apply changes within seconds. Without it, a 15-minute cron polls comments as
           a fallback.
         </>

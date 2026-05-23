@@ -1,6 +1,6 @@
 import { type Logger, registry } from "@alertforge/core";
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { alerts, prs, runs } from "@alertforge/db/schema/domain";
 import { channelConfigs, triggers } from "@alertforge/db/schema/triggers";
 import { buildDigest } from "@alertforge/step-daily-digest";
@@ -115,10 +115,10 @@ export const triggersRouter = router({
     return db
       .select({
         trigger: triggers,
-        repo: reposConfig,
+        repo: repos,
       })
       .from(triggers)
-      .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+      .innerJoin(repos, eq(repos.id, triggers.repoId))
       .orderBy(desc(triggers.createdAt));
   }),
 
@@ -128,11 +128,7 @@ export const triggersRouter = router({
     const trigger = triggerRows[0];
     if (!trigger) return null;
 
-    const repoRows = await db
-      .select()
-      .from(reposConfig)
-      .where(eq(reposConfig.id, trigger.repoId))
-      .limit(1);
+    const repoRows = await db.select().from(repos).where(eq(repos.id, trigger.repoId)).limit(1);
     const channels = await db
       .select()
       .from(channelConfigs)
@@ -152,9 +148,9 @@ export const triggersRouter = router({
     const db = createDb();
 
     const repoRows = await db
-      .select({ id: reposConfig.id })
-      .from(reposConfig)
-      .where(eq(reposConfig.id, input.repoId))
+      .select({ id: repos.id })
+      .from(repos)
+      .where(eq(repos.id, input.repoId))
       .limit(1);
     if (!repoRows[0]) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "unknown_repo_id" });
@@ -273,10 +269,10 @@ export const triggersRouter = router({
             name: triggers.name,
             preset: triggers.preset,
             repoId: triggers.repoId,
-            repoGithub: reposConfig.github,
+            repoGithub: repos.github,
           })
           .from(triggers)
-          .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+          .innerJoin(repos, eq(repos.id, triggers.repoId))
           .where(and(whereProject, eq(triggers.enabled, true)))
           .limit(1);
 
@@ -439,10 +435,10 @@ export const triggersRouter = router({
         .select({
           id: triggers.id,
           name: triggers.name,
-          capCents: reposConfig.dailyCostCapCents,
+          capCents: repos.dailyCostCapCents,
         })
         .from(triggers)
-        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+        .innerJoin(repos, eq(repos.id, triggers.repoId))
         .where(eq(triggers.id, input.triggerId))
         .limit(1);
       const trigger = trigRows[0];

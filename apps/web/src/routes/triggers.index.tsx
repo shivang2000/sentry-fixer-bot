@@ -54,7 +54,7 @@ function TriggersPage() {
         <div className="rounded-md border border-zinc-800 border-dashed p-8 text-center">
           <p className="text-sm text-zinc-400">No triggers yet.</p>
           <p className="mt-1 text-[11px] text-zinc-500">
-            Triggers used to live as rows in <code>repos_config</code>. Click{" "}
+            Triggers attach a pipeline config to a (source, project, repo) tuple. Click{" "}
             <strong>New trigger</strong> to wire your first one up.
           </p>
         </div>

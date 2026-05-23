@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { reposConfig } from "./admin";
+import { repos } from "./admin";
 
 /**
  * Trigger = the addressable unit one pipeline-config row attaches to.
@@ -11,9 +11,9 @@ import { reposConfig } from "./admin";
  *   (sentry, web-frontend, acme-corp/web)
  *   (posthog, signup-flow, acme-corp/web)   ← future
  *
- * Backfilled from repos_config at migration time with preset='auto_fix'
- * and default model picks. repos_config stays read-only during 2.0.x
- * and is dropped in 2.1 (P9).
+ * Backfilled from the legacy `repos_config` table at the P4 migration;
+ * P9 renamed that table to `repos` (canonical name). The data is the
+ * same; only the SQL identifier changed.
  *
  * `config` is a JSONB blob validated against TriggerConfigSchema from
  * @alertforge/core. Stores per-step model picks, advanced toggles,
@@ -23,12 +23,10 @@ export const triggers = pgTable(
   "triggers",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    // repo_id references repos_config.id today — that table is
-    // effectively the "repos" entity. P9 drops repos_config; the
-    // FK target swaps to a new repos table at that point.
+    // repo_id references the `repos` table (the repo-identity entity).
     repoId: uuid("repo_id")
       .notNull()
-      .references(() => reposConfig.id, { onDelete: "cascade" }),
+      .references(() => repos.id, { onDelete: "cascade" }),
     sourceType: text("source_type").notNull(),
     sourceProject: text("source_project").notNull(),
     name: text("name").notNull(),

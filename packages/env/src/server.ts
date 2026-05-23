@@ -1,15 +1,6 @@
 import "dotenv/config";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
-import { applyLegacyEnvFallbacks } from "./legacy-fallback";
-
-// Apply SFB_* → ALERTFORGE_* back-compat shim BEFORE createEnv reads
-// process.env. createEnv evaluates at module-load time, so the
-// fallback has to land first or it'll see only the new (empty) keys.
-//
-// Removed in alertforge-2.1.0 (P9 cleanup); see
-// docs/alertforge/specs/2026-05-21-rename-migration.md §Back-compat.
-applyLegacyEnvFallbacks();
 
 export const env = createEnv({
   server: {
@@ -44,9 +35,9 @@ export const env = createEnv({
     GITHUB_APP_INSTALLATION_ID: z.string().min(1).optional(),
     // Optional. When set, the /webhooks/github endpoint verifies the
     // X-Hub-Signature-256 header on incoming issue_comment events so
-    // /alertforge (or legacy /sfb) commands on PRs can drive the
-    // follow-up loop in real-time. Unset → endpoint returns 503 and
-    // the cron fallback is the only way comments get processed.
+    // /alertforge commands on PRs can drive the follow-up loop in
+    // real-time. Unset → endpoint returns 503 and the cron fallback is
+    // the only way comments get processed.
     GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
 
     // --- Agent runtime ---
@@ -56,8 +47,6 @@ export const env = createEnv({
     AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(900),
 
     // --- Optional bootstrap admin (skip first-signup-becomes-admin race) ---
-    // Renamed from SFB_BOOTSTRAP_ADMIN_EMAIL in P7. Legacy key still
-    // accepted via applyLegacyEnvFallbacks() above.
     ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL: z.email().optional(),
   },
   runtimeEnv: process.env,

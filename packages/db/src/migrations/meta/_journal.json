@@ -57,6 +57,13 @@
       "when": 1779326444270,
       "tag": "0007_natural_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779932400000,
+      "tag": "0008_drop_repos_config",
+      "breakpoints": true
     }
   ]
 }

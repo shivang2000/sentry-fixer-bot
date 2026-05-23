@@ -128,7 +128,7 @@ describe("pollOpenPr", () => {
     expect(out.outcome).toBeNull();
   });
 
-  it("recognises sentry-fixer-bot[bot] as the bot too (back-compat with old App handle)", async () => {
+  it("no longer recognises sentry-fixer-bot[bot] as a bot — legacy handle is treated as human (P9 cleanup)", async () => {
     const pr = makeBotPr({ openedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) });
     const gh = new FakeGithub({
       prState: {
@@ -148,8 +148,10 @@ describe("pollOpenPr", () => {
       ],
     });
     const out = await pollOpenPr(pr, { github: gh });
-    expect(out.outcome).toBe("merged_clean");
-    expect(out.humanCommits).toBe(0);
+    // Legacy handle no longer counted as a bot, so the commit counts
+    // as a human edit → merged_with_edits.
+    expect(out.outcome).toBe("merged_with_edits");
+    expect(out.humanCommits).toBe(1);
   });
 
   it("treats commit-author lookup failure as humanCommits=null without throwing", async () => {

@@ -12,7 +12,7 @@
  * actions the legacy behavior requires.
  *
  * Stays compatible with the legacy run-status state machine:
- *   - no_repo_match    repos_config row missing
+ *   - no_repo_match    `repos` row missing
  *   - budget_exhausted budget step writes allowed=false
  *   - agent_error      agent exited non-zero
  *   - test_failed      test gate ran + failed
@@ -347,7 +347,7 @@ async function applyPostPipelineSideEffects(input: {
 
   // Record token/cost usage. The wrapper doesn't track usage today so
   // we still call the legacy recordUsage with zeros; budget enforcement
-  // is still hard-gated by repos_config caps via the budget wrapper.
+  // is still hard-gated by `repos` caps via the budget wrapper.
   await recordUsage({
     repo: input.repo,
     tokens: 0,

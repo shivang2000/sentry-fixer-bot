@@ -103,7 +103,7 @@ export interface WrapFixAgentOpts {
   runRepoTestsFn?: RunRepoTestsFn;
   /** Side-channel for test-gate to read the final test attempt result. */
   testRecorder?: TestRecorder;
-  /** Test command override from repos_config; legacy parity. */
+  /** Test command override from `repos.testCommand`; legacy parity. */
   testCommandOverride?: string | null;
   /** Pre-rendered claude home + mcp config. None in tests. */
   mcpConfigPath?: string;

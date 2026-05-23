@@ -8,12 +8,12 @@
  * workspace or running the agent (mirrors legacy behavior in
  * apps/server/src/worker/agent-job.ts).
  *
- * The legacy `checkRepoBudget` reads `repos_config` to find the caps;
- * here we accept either the legacy DB-driven function via factory
- * arg or fall back to the cfg.budget numbers (matches the resolved
- * trigger config). The wrapper prefers the legacy path in production
- * (so repos_config stays the source of truth during the 2.0.x window)
- * and the cfg path in tests.
+ * The legacy `checkRepoBudget` reads the `repos` table to find the
+ * caps; here we accept either the legacy DB-driven function via
+ * factory arg or fall back to the cfg.budget numbers (matches the
+ * resolved trigger config). The wrapper prefers the legacy path in
+ * production (so `repos` stays the source of truth for repo-level
+ * caps) and the cfg path in tests.
  *
  * Reads:  ctx.trigger (for repo + budget caps; falls back to cfg)
  * Writes: ctx.budget; sets cfg.stopAfter='budget' on deny.

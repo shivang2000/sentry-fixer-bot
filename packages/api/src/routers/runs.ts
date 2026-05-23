@@ -1,5 +1,5 @@
 import { createDb } from "@alertforge/db";
-import { reposConfig } from "@alertforge/db/schema/admin";
+import { repos } from "@alertforge/db/schema/admin";
 import { alerts, prs, runLogs, runs } from "@alertforge/db/schema/domain";
 import { triggers } from "@alertforge/db/schema/triggers";
 import { TRPCError } from "@trpc/server";
@@ -191,8 +191,8 @@ export const runsRouter = router({
           preset: triggers.preset,
           sourceType: triggers.sourceType,
           sourceProject: triggers.sourceProject,
-          repoGithub: reposConfig.github,
-          dailyCostCapCents: reposConfig.dailyCostCapCents,
+          repoGithub: repos.github,
+          dailyCostCapCents: repos.dailyCostCapCents,
           runCount: sql<number>`count(${runs.id})::int`.as("run_count"),
           prCount: sql<number>`count(distinct ${prs.id})::int`.as("pr_count"),
           totalCostCents: sql<number>`coalesce(sum(${runs.costCents}), 0)::int`.as(
@@ -206,7 +206,7 @@ export const runsRouter = router({
           ),
         })
         .from(triggers)
-        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+        .innerJoin(repos, eq(repos.id, triggers.repoId))
         .leftJoin(runs, and(eq(runs.triggerId, triggers.id), gte(runs.startedAt, cutoff)))
         .leftJoin(prs, eq(prs.runId, runs.id))
         .groupBy(
@@ -215,8 +215,8 @@ export const runsRouter = router({
           triggers.preset,
           triggers.sourceType,
           triggers.sourceProject,
-          reposConfig.github,
-          reposConfig.dailyCostCapCents,
+          repos.github,
+          repos.dailyCostCapCents,
         )
         .orderBy(desc(sql`total_cost_cents`));
       return rows;

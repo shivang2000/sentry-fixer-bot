@@ -8,19 +8,14 @@ const PROD_FILE = "/etc/alertforge/env";
 const DEV_FILE = "apps/server/.env.local";
 
 function targetFile(): string {
-  if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
-    return (
-      process.env.ALERTFORGE_ENV_FILE ?? process.env.SFB_ENV_FILE ?? "/alertforge/state/etc/env"
-    );
+  if (process.env.ALERTFORGE_RUN_MODE === "container") {
+    return process.env.ALERTFORGE_ENV_FILE ?? "/alertforge/state/etc/env";
   }
   return env.NODE_ENV === "production" ? PROD_FILE : DEV_FILE;
 }
 
 function shouldReloadSystemd(): boolean {
-  return (
-    env.NODE_ENV === "production" &&
-    (process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) !== "container"
-  );
+  return env.NODE_ENV === "production" && process.env.ALERTFORGE_RUN_MODE !== "container";
 }
 
 export async function setEnvSecret(key: string, value: string): Promise<void> {
