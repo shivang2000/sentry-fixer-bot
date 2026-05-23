@@ -26,7 +26,14 @@ jobs:
       - name: Test
         run: bun test
         env:
-          DATABASE_URL: postgres://test:test@localhost:5432/sfb_test
+          DATABASE_URL: postgres://test:test@localhost:5432/alertforge_test
           BETTER_AUTH_SECRET: ci-only-not-a-real-secret-but-long-enough-for-zod
           BETTER_AUTH_URL: http://localhost:3000
           NODE_ENV: test
+          # P7 rename: accept both legacy SFB_* and new ALERTFORGE_*
+          # during the 2.0.x back-compat window. Operators should add
+          # the new secrets alongside the old ones during cutover; P9
+          # will drop the legacy fallback entirely.
+          ALERTFORGE_RUN_MODE: ${{ secrets.ALERTFORGE_RUN_MODE || secrets.SFB_RUN_MODE }}
+          ALERTFORGE_STATE_DIR: ${{ secrets.ALERTFORGE_STATE_DIR || secrets.SFB_STATE_DIR }}
+          ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL: ${{ secrets.ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL || secrets.SFB_BOOTSTRAP_ADMIN_EMAIL }}

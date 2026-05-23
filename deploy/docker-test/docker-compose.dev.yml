@@ -1,4 +1,4 @@
-name: sentry-fixer-bot-dev
+name: alertforge-dev
 
 # Local development:
 #   * Bind-mounts the host repo into the container so edits are visible
@@ -7,37 +7,37 @@ name: sentry-fixer-bot-dev
 #     a host-side `bun install` (which produces macOS arm64 binaries)
 #     can't leak into the Linux container.
 #   * `bun install` runs inside the container on first up; cached in
-#     the named `sfb_dev_node_modules_*` volumes after.
+#     the named `alertforge_dev_node_modules_*` volumes after.
 #   * DEPLOYMENT_MODE=local_trusted bootstraps the local-board admin
 #     automatically — no /sign-up needed; visit / and you're admin.
-#   * One named volume — sfb_dev_state — mounted at /sfb/state holds
-#     EVERY piece of mutable per-instance state: sfb-runner's HOME
+#   * One named volume — alertforge_dev_state — mounted at /alertforge/state holds
+#     EVERY piece of mutable per-instance state: alertforge-runner's HOME
 #     (.claude / .config/gh / future .codex / .opencloud / .npm / .cache),
-#     /sfb/state/etc/env (the UI-mutated env file), /sfb/state/work
-#     (per-session work dirs), /sfb/state/skills (uploaded skills).
+#     /alertforge/state/etc/env (the UI-mutated env file), /alertforge/state/work
+#     (per-session work dirs), /alertforge/state/skills (uploaded skills).
 #     A crash + container recreate restores all of it.
 
 services:
   postgres:
     image: postgres:16
-    container_name: sfb-dev-postgres
+    container_name: alertforge-dev-postgres
     environment:
-      POSTGRES_DB: sentry-fixer-bot
+      POSTGRES_DB: alertforge
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5433:5432"
     volumes:
-      - sfb_dev_postgres:/var/lib/postgresql/data
+      - alertforge_dev_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sentry-fixer-bot"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d alertforge"]
       interval: 5s
       timeout: 5s
       retries: 20
     restart: unless-stopped
 
-  sfb:
-    container_name: sfb-dev-app
+  alertforge:
+    container_name: alertforge-dev-app
     build:
       context: ../..
       dockerfile: deploy/docker-test/Dockerfile.dev
@@ -45,7 +45,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:password@postgres:5432/sentry-fixer-bot
+      DATABASE_URL: postgres://postgres:password@postgres:5432/alertforge
       BETTER_AUTH_URL: http://localhost:3000
       CORS_ORIGIN: http://localhost:3000
       PUBLIC_BASE_URL: http://localhost:3000
@@ -54,34 +54,34 @@ services:
       DEPLOYMENT_MODE: local_trusted
       SERVER_BIND: loopback
       SERVER_BIND_HOST: 0.0.0.0
-      SFB_RUN_MODE: container
-      SFB_STATE_DIR: /sfb/state
+      ALERTFORGE_RUN_MODE: container
+      ALERTFORGE_STATE_DIR: /alertforge/state
       NODE_ENV: production
       TURBO_FORCE: "true"
     ports:
       - "3000:3000"
     volumes:
       # Bind mount the host repo at the container's working directory.
-      - ../..:/opt/sfb/current
+      - ../..:/opt/alertforge/current
       # Anonymous volumes mask every host node_modules / build artefact
       # path so the Linux container keeps its own copies.
-      - /opt/sfb/current/node_modules
-      - /opt/sfb/current/apps/server/node_modules
-      - /opt/sfb/current/apps/server/dist
-      - /opt/sfb/current/apps/server/public
-      - /opt/sfb/current/apps/web/node_modules
-      - /opt/sfb/current/apps/web/dist
-      - /opt/sfb/current/packages/api/node_modules
-      - /opt/sfb/current/packages/auth/node_modules
-      - /opt/sfb/current/packages/config/node_modules
-      - /opt/sfb/current/packages/db/node_modules
-      - /opt/sfb/current/packages/env/node_modules
-      - /opt/sfb/current/packages/ui/node_modules
+      - /opt/alertforge/current/node_modules
+      - /opt/alertforge/current/apps/server/node_modules
+      - /opt/alertforge/current/apps/server/dist
+      - /opt/alertforge/current/apps/server/public
+      - /opt/alertforge/current/apps/web/node_modules
+      - /opt/alertforge/current/apps/web/dist
+      - /opt/alertforge/current/packages/api/node_modules
+      - /opt/alertforge/current/packages/auth/node_modules
+      - /opt/alertforge/current/packages/config/node_modules
+      - /opt/alertforge/current/packages/db/node_modules
+      - /opt/alertforge/current/packages/env/node_modules
+      - /opt/alertforge/current/packages/ui/node_modules
       # The one and only persistent state volume. Everything the operator
       # configures + every cred + every chat session's work dir lives here.
-      - sfb_dev_state:/sfb/state
+      - alertforge_dev_state:/alertforge/state
     restart: unless-stopped
 
 volumes:
-  sfb_dev_postgres:
-  sfb_dev_state:
+  alertforge_dev_postgres:
+  alertforge_dev_state:

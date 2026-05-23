@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Daily postgres backup → S3 with date-prefixed key.
-# Triggered by sfb-backup.timer. Reads DATABASE_URL + S3_BUCKET from
-# /etc/sfb/env (sourced by systemd EnvironmentFile=).
+# Triggered by alertforge-backup.timer. Reads DATABASE_URL + S3_BUCKET from
+# /etc/alertforge/env (sourced by systemd EnvironmentFile=).
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ set -euo pipefail
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 KEY="db-backups/${STAMP}.sql.gz"
-TMP="/tmp/sfb-backup-${STAMP}.sql.gz"
+TMP="/tmp/alertforge-backup-${STAMP}.sql.gz"
 
 pg_dump --no-owner --no-privileges "$DATABASE_URL" | gzip -9 > "$TMP"
 

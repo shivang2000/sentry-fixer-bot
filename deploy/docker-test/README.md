@@ -1,6 +1,6 @@
 # docker-test — local harness
 
-Two ways to run sentry-fixer-bot in containers locally:
+Two ways to run alertforge in containers locally:
 
 | Mode | Use when | Source | Iteration speed |
 |---|---|---|---|
@@ -26,9 +26,9 @@ bundle). After that:
 
 - **Edit any file under `apps/` or `packages/`** on the host → the
   bind-mounted source sees it instantly.
-- To pick up backend code changes: `docker compose -f docker-compose.dev.yml restart sfb`.
+- To pick up backend code changes: `docker compose -f docker-compose.dev.yml restart alertforge`.
 - To pick up new dependencies: stop the container, delete the
-  `sfb_dev_*` named volumes, `up --build` again.
+  `alertforge_dev_*` named volumes, `up --build` again.
 
 Visit <http://localhost:3000>.
 
@@ -40,14 +40,14 @@ etc.
 
 ```bash
 # Tail server logs
-docker compose -f docker-compose.dev.yml logs -f sfb
+docker compose -f docker-compose.dev.yml logs -f alertforge
 
 # Open a shell inside the running container
-docker compose -f docker-compose.dev.yml exec sfb bash
+docker compose -f docker-compose.dev.yml exec alertforge bash
 
 # Re-run migrations after schema changes
-docker compose -f docker-compose.dev.yml exec sfb \
-    bash -lc 'bun --filter=@sentry-fixer-bot/db db:migrate'
+docker compose -f docker-compose.dev.yml exec alertforge \
+    bash -lc 'bun --filter=@alertforge/db db:migrate'
 
 # Stop, keep DB volume
 docker compose -f docker-compose.dev.yml down
@@ -66,12 +66,12 @@ docker compose -f docker-compose.prod.yml up --build
 ```
 
 This image clones the public repo at build time (commit pinned via the
-`SFB_REV` build-arg, defaults to `main`). Iteration cycle:
+`ALERTFORGE_REV` build-arg, defaults to `main`). Iteration cycle:
 
 ```bash
 # Push a new commit to main, then force a fresh clone:
 docker compose -f docker-compose.prod.yml build \
-    --build-arg SFB_REV=$(date +%s)
+    --build-arg ALERTFORGE_REV=$(date +%s)
 docker compose -f docker-compose.prod.yml up
 ```
 
@@ -98,7 +98,7 @@ Two options, same in both modes:
    Then `docker compose -f docker-compose.dev.yml up`.
 
 2. Once the Settings page (E12) ships, configure them via the UI —
-   the container's `/etc/sfb/env` is rewritten and the server picks up
+   the container's `/etc/alertforge/env` is rewritten and the server picks up
    the change on next request.
 
 ---

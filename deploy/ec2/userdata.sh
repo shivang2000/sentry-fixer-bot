@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EC2 first-boot bootstrap for sentry-fixer-bot.
+# EC2 first-boot bootstrap for alertforge.
 # Target: Ubuntu 24.04 LTS (arm64 or amd64). Run as root via cloud-init.
 
 set -euxo pipefail
@@ -27,10 +27,10 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 systemctl enable --now docker
 
 # --- Bun runtime (installed to /usr/local/bin so systemd can find it) ---
-SFB_USER=sfb-runner
-useradd --system --create-home --shell /bin/bash "$SFB_USER" || true
-runuser -u "$SFB_USER" -- bash -c 'curl -fsSL https://bun.sh/install | bash'
-install -m 0755 "/home/${SFB_USER}/.bun/bin/bun" /usr/local/bin/bun
+ALERTFORGE_USER=alertforge-runner
+useradd --system --create-home --shell /bin/bash "$ALERTFORGE_USER" || true
+runuser -u "$ALERTFORGE_USER" -- bash -c 'curl -fsSL https://bun.sh/install | bash'
+install -m 0755 "/home/${ALERTFORGE_USER}/.bun/bin/bun" /usr/local/bin/bun
 
 # --- gh CLI ---
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -48,15 +48,15 @@ unzip -q /tmp/awscliv2.zip -d /tmp/awscli
 rm -rf /tmp/awscli /tmp/awscliv2.zip
 
 # --- Claude Code CLI ---
-runuser -u "$SFB_USER" -- bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
-install -m 0755 "/home/${SFB_USER}/.local/bin/claude" /usr/local/bin/claude || true
+runuser -u "$ALERTFORGE_USER" -- bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+install -m 0755 "/home/${ALERTFORGE_USER}/.local/bin/claude" /usr/local/bin/claude || true
 
 # --- App dirs ---
-install -d -o "$SFB_USER" -g "$SFB_USER" /opt/sfb /var/lib/sfb /var/lib/sfb/work /etc/sfb
-chmod 0750 /etc/sfb
+install -d -o "$ALERTFORGE_USER" -g "$ALERTFORGE_USER" /opt/alertforge /var/lib/alertforge /var/lib/alertforge/work /etc/alertforge
+chmod 0750 /etc/alertforge
 
 # --- Postgres via docker-compose ---
-# Operator will clone the repo into /opt/sfb/current and run db:start.
+# Operator will clone the repo into /opt/alertforge/current and run db:start.
 
 # --- Done ---
-echo "userdata bootstrap complete; next: clone repo into /opt/sfb/current, populate /etc/sfb/env, then \`systemctl enable --now sfb-server sfb-worker sfb-backup.timer\`"
+echo "userdata bootstrap complete; next: clone repo into /opt/alertforge/current, populate /etc/alertforge/env, then \`systemctl enable --now alertforge-server alertforge-worker alertforge-backup.timer\`"

@@ -206,17 +206,17 @@ fi
 systemctl enable --now nginx
 
 # ---------- App scaffolding ----------
-SFB_RUNNER="sfb-runner"
-if ! id "$SFB_RUNNER" >/dev/null 2>&1; then
-  log "creating system user $SFB_RUNNER (uid 4000)"
-  useradd --system --uid 4000 --create-home --shell /bin/bash "$SFB_RUNNER"
+ALERTFORGE_RUNNER="alertforge-runner"
+if ! id "$ALERTFORGE_RUNNER" >/dev/null 2>&1; then
+  log "creating system user $ALERTFORGE_RUNNER (uid 4000)"
+  useradd --system --uid 4000 --create-home --shell /bin/bash "$ALERTFORGE_RUNNER"
 fi
-install -d -m 0755 -o "$SFB_RUNNER" -g "$SFB_RUNNER" /opt/sfb
-install -d -m 0755 -o "$SFB_RUNNER" -g "$SFB_RUNNER" /var/lib/sfb
-install -d -m 0755 -o "$SFB_RUNNER" -g "$SFB_RUNNER" /var/lib/sfb/work
-install -d -m 0755 -o "$SFB_RUNNER" -g "$SFB_RUNNER" /var/lib/sfb/logs
-install -d -m 0755 -o "$SFB_RUNNER" -g "$SFB_RUNNER" /var/lib/sfb/skills
-install -d -m 0750 -o root -g "$SFB_RUNNER" /etc/sfb
+install -d -m 0755 -o "$ALERTFORGE_RUNNER" -g "$ALERTFORGE_RUNNER" /opt/alertforge
+install -d -m 0755 -o "$ALERTFORGE_RUNNER" -g "$ALERTFORGE_RUNNER" /var/lib/alertforge
+install -d -m 0755 -o "$ALERTFORGE_RUNNER" -g "$ALERTFORGE_RUNNER" /var/lib/alertforge/work
+install -d -m 0755 -o "$ALERTFORGE_RUNNER" -g "$ALERTFORGE_RUNNER" /var/lib/alertforge/logs
+install -d -m 0755 -o "$ALERTFORGE_RUNNER" -g "$ALERTFORGE_RUNNER" /var/lib/alertforge/skills
+install -d -m 0750 -o root -g "$ALERTFORGE_RUNNER" /etc/alertforge
 
 # ---------- Summary ----------
 log "verifying tool versions"
@@ -235,14 +235,14 @@ log "verifying tool versions"
   echo "aws     : $(aws --version)"
   echo "psql    : $(psql --version)"
   echo "nginx   : $(nginx -v 2>&1)"
-} | tee /tmp/sfb-bootstrap-versions.txt
+} | tee /tmp/alertforge-bootstrap-versions.txt
 
 log "done. next steps:"
 cat <<NEXT
   1. relogin as $LOGIN_USER (or run 'newgrp docker') so docker group takes effect
   2. clone the repo:
-       git clone https://github.com/shivang2000/sentry-fixer-bot.git /opt/sfb/current
-  3. populate /etc/sfb/env (see docs/runbook.md)
-  4. cd /opt/sfb/current && bun install --frozen-lockfile && bun run build
+       git clone https://github.com/shivang2000/alertforge.git /opt/alertforge/current
+  3. populate /etc/alertforge/env (see docs/runbook.md)
+  4. cd /opt/alertforge/current && bun install --frozen-lockfile && bun run build
   5. install systemd units from deploy/systemd/ and start them
 NEXT

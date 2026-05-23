@@ -1,17 +1,17 @@
-name: sentry-fixer-bot
+name: alertforge
 
 services:
   postgres:
     image: postgres
-    container_name: sentry-fixer-bot-postgres
+    container_name: alertforge-postgres
     environment:
-      POSTGRES_DB: sentry-fixer-bot
+      POSTGRES_DB: alertforge
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5433:5432"
     volumes:
-      - sentry-fixer-bot_postgres_data:/var/lib/postgresql
+      - alertforge_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -20,4 +20,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  sentry-fixer-bot_postgres_data:
+  alertforge_postgres_data:

@@ -1,8 +1,8 @@
-# Local development image for sentry-fixer-bot.
+# Local development image for alertforge.
 #
 # Pairs with docker-compose.dev.yml. Source is BIND-MOUNTED from the
 # host at runtime — this image only carries OS dependencies and the
-# sfb-runner user. `bun install` runs inside the container so the
+# alertforge-runner user. `bun install` runs inside the container so the
 # resulting node_modules are Linux binaries (a host install on
 # Mac/arm64 would leak the wrong artefacts into a Linux container).
 
@@ -16,66 +16,66 @@ RUN bash /tmp/bootstrap.sh && rm -f /tmp/bootstrap.sh
 
 # bootstrap-al2023.sh installs claude under /home/ec2-user/.nvm and symlinks
 # /usr/local/bin/claude to it. ec2-user's home is mode 0700 so other users
-# (sfb-runner, who actually runs the chat/agent subprocesses) cannot follow
+# (alertforge-runner, who actually runs the chat/agent subprocesses) cannot follow
 # the symlink. Open up traversal on the path components only — the binaries
 # themselves are already mode 0755.
 RUN chmod o+x /home/ec2-user
 
 # Pre-create the bind-mount target AND every anonymous-volume mount
-# point as sfb-runner so the volumes inherit that ownership at first
-# container start. Without this they'd be root-owned and the sfb-runner
+# point as alertforge-runner so the volumes inherit that ownership at first
+# container start. Without this they'd be root-owned and the alertforge-runner
 # subprocess in setup.sh couldn't write into them.
-RUN install -d -o sfb-runner -g sfb-runner \
-      /opt/sfb \
-      /opt/sfb/current \
-      /opt/sfb/current/node_modules \
-      /opt/sfb/current/apps \
-      /opt/sfb/current/apps/server \
-      /opt/sfb/current/apps/server/node_modules \
-      /opt/sfb/current/apps/server/dist \
-      /opt/sfb/current/apps/server/public \
-      /opt/sfb/current/apps/web \
-      /opt/sfb/current/apps/web/node_modules \
-      /opt/sfb/current/apps/web/dist \
-      /opt/sfb/current/packages \
-      /opt/sfb/current/packages/api/node_modules \
-      /opt/sfb/current/packages/auth/node_modules \
-      /opt/sfb/current/packages/config/node_modules \
-      /opt/sfb/current/packages/db/node_modules \
-      /opt/sfb/current/packages/env/node_modules \
-      /opt/sfb/current/packages/ui/node_modules
+RUN install -d -o alertforge-runner -g alertforge-runner \
+      /opt/alertforge \
+      /opt/alertforge/current \
+      /opt/alertforge/current/node_modules \
+      /opt/alertforge/current/apps \
+      /opt/alertforge/current/apps/server \
+      /opt/alertforge/current/apps/server/node_modules \
+      /opt/alertforge/current/apps/server/dist \
+      /opt/alertforge/current/apps/server/public \
+      /opt/alertforge/current/apps/web \
+      /opt/alertforge/current/apps/web/node_modules \
+      /opt/alertforge/current/apps/web/dist \
+      /opt/alertforge/current/packages \
+      /opt/alertforge/current/packages/api/node_modules \
+      /opt/alertforge/current/packages/auth/node_modules \
+      /opt/alertforge/current/packages/config/node_modules \
+      /opt/alertforge/current/packages/db/node_modules \
+      /opt/alertforge/current/packages/env/node_modules \
+      /opt/alertforge/current/packages/ui/node_modules
 
-# /sfb/state is the SINGLE persistent volume that holds every piece of
-# mutable per-instance state — sfb-runner's HOME (so every CLI's dotfiles
+# /alertforge/state is the SINGLE persistent volume that holds every piece of
+# mutable per-instance state — alertforge-runner's HOME (so every CLI's dotfiles
 # naturally land in the volume: .claude, .config/gh, .codex, .opencloud,
 # .npm, .cache), the UI-mutated env file under etc/env, per-session work
 # dirs, and uploaded skills. One named volume = one disk artefact to
 # backup later, no per-tool wiring as we add more CLIs.
-RUN install -d -o sfb-runner -g sfb-runner -m 0700 \
-      /sfb \
-      /sfb/state \
-      /sfb/state/home \
-      /sfb/state/home/.claude \
-      /sfb/state/home/.config \
-      /sfb/state/home/.config/gh \
-      /sfb/state/home/.npm \
-      /sfb/state/home/.cache \
-      /sfb/state/work \
-      /sfb/state/skills \
-      /sfb/state/dev \
-      /sfb/state/repos \
- && install -d -o root -g sfb-runner -m 0770 /sfb/state/etc
+RUN install -d -o alertforge-runner -g alertforge-runner -m 0700 \
+      /alertforge \
+      /alertforge/state \
+      /alertforge/state/home \
+      /alertforge/state/home/.claude \
+      /alertforge/state/home/.config \
+      /alertforge/state/home/.config/gh \
+      /alertforge/state/home/.npm \
+      /alertforge/state/home/.cache \
+      /alertforge/state/work \
+      /alertforge/state/skills \
+      /alertforge/state/dev \
+      /alertforge/state/repos \
+ && install -d -o root -g alertforge-runner -m 0770 /alertforge/state/etc
 
-WORKDIR /opt/sfb/current
+WORKDIR /opt/alertforge/current
 
-ENV SFB_RUN_MODE=container \
-    SFB_STATE_DIR=/sfb/state \
+ENV ALERTFORGE_RUN_MODE=container \
+    ALERTFORGE_STATE_DIR=/alertforge/state \
     NODE_ENV=development \
     PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 EXPOSE 3000
 
 # setup.sh runs as root, handles bun install / migrate / build as
-# sfb-runner internally, then exec's the server as PID 1 so logs
+# alertforge-runner internally, then exec's the server as PID 1 so logs
 # stream to `docker compose logs -f`.
-CMD ["bash", "/opt/sfb/current/setup.sh"]
+CMD ["bash", "/opt/alertforge/current/setup.sh"]

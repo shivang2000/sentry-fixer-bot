@@ -1,10 +1,24 @@
-# sentry-fixer-bot — Operator Runbook
+# Alertforge — Operator Runbook
 
-This is the on-call runbook for operating a `sentry-fixer-bot` deployment. Read it before you start the EC2 instance, then keep it open.
+> **P7 rename note (2026-05-23):** the project was renamed from
+> `sentry-fixer-bot` to `alertforge`. During `alertforge-2.0.x` BOTH
+> the old `SFB_*` env keys / `/var/lib/sfb` paths / `sfb-*` systemd
+> units AND the new `ALERTFORGE_*` / `/var/lib/alertforge` /
+> `alertforge-*` surfaces work — the server reads both and emits a
+> one-shot deprecation warning per legacy key. `alertforge-2.1.0` (P9)
+> removes the legacy surface; operators should migrate during 2.0.x.
 
-## 1. Environment file (`/etc/sfb/env`)
+This is the on-call runbook for operating an alertforge deployment.
+Read it before you start the EC2 instance, then keep it open.
 
-Single env file consumed by systemd (`EnvironmentFile=` directive). Mode `0640`, owned by `root:sfb-runner`. The UI writes here when an admin saves a secret in `/mcps`.
+## 1. Environment file (`/etc/alertforge/env`)
+
+Single env file consumed by systemd (`EnvironmentFile=` directive).
+Mode `0640`, owned by `root:alertforge-runner`. The UI writes here
+when an admin saves a secret in `/mcps`. The legacy path `/etc/sfb/env`
+is symlinked to the new location at server boot (idempotent) so any
+operator scripts still referencing the old path continue to work
+during 2.0.x.
 
 Required keys:
 

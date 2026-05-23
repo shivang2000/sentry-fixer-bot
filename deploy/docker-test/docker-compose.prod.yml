@@ -1,4 +1,4 @@
-name: sentry-fixer-bot-prod
+name: alertforge-prod
 
 # Production-shaped local test:
 #   * Dockerfile.prod clones the public repo at build time and bakes
@@ -14,36 +14,36 @@ name: sentry-fixer-bot-prod
 services:
   postgres:
     image: postgres:16
-    container_name: sfb-prod-postgres
+    container_name: alertforge-prod-postgres
     environment:
-      POSTGRES_DB: sentry-fixer-bot
+      POSTGRES_DB: alertforge
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
       - "5433:5432"
     volumes:
-      - sfb_prod_postgres:/var/lib/postgresql/data
+      - alertforge_prod_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sentry-fixer-bot"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d alertforge"]
       interval: 5s
       timeout: 5s
       retries: 20
     restart: unless-stopped
 
-  sfb:
-    container_name: sfb-prod-app
+  alertforge:
+    container_name: alertforge-prod-app
     build:
       context: .
       dockerfile: Dockerfile.prod
       args:
         # Bump to force a fresh git clone:
-        #   docker compose -f docker-compose.prod.yml build --build-arg SFB_REV=$(date +%s)
-        SFB_REV: ${SFB_REV:-main}
+        #   docker compose -f docker-compose.prod.yml build --build-arg ALERTFORGE_REV=$(date +%s)
+        ALERTFORGE_REV: ${ALERTFORGE_REV:-main}
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:password@postgres:5432/sentry-fixer-bot
+      DATABASE_URL: postgres://postgres:password@postgres:5432/alertforge
       BETTER_AUTH_URL: http://localhost:3000
       CORS_ORIGIN: http://localhost:3000
       PUBLIC_BASE_URL: http://localhost:3000
@@ -52,11 +52,11 @@ services:
       DEPLOYMENT_MODE: local_trusted
       SERVER_BIND: loopback
       SERVER_BIND_HOST: 0.0.0.0
-      SFB_RUN_MODE: container
+      ALERTFORGE_RUN_MODE: container
       NODE_ENV: production
     ports:
       - "3000:3000"
     restart: unless-stopped
 
 volumes:
-  sfb_prod_postgres:
+  alertforge_prod_postgres:

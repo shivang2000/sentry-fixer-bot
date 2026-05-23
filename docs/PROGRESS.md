@@ -1,4 +1,10 @@
-# sentry-fixer-bot — Progress Tracker
+# Alertforge (née sentry-fixer-bot) — Progress Tracker
+
+> **P7 rename note (2026-05-23):** `sentry-fixer-bot` was renamed to
+> `alertforge`. This file preserves the historical record of the MVP
+> phase; the canonical post-rename home for new specs + plans is
+> [`docs/alertforge/`](alertforge/). References to the old name below
+> are intentional historical context.
 
 **Last updated:** 2026-05-16 (post V2 UI completion)
 **Tag:** `mvp-1.0.0`
