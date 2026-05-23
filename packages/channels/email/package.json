@@ -15,7 +15,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

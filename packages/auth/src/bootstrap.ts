@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createDb } from "@sentry-fixer-bot/db";
-import { user } from "@sentry-fixer-bot/db/schema/auth";
-import { boardClaimTokens } from "@sentry-fixer-bot/db/schema/invites";
-import { env } from "@sentry-fixer-bot/env/server";
+import { createDb } from "@alertforge/db";
+import { user } from "@alertforge/db/schema/auth";
+import { boardClaimTokens } from "@alertforge/db/schema/invites";
+import { env } from "@alertforge/env/server";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { LOCAL_BOARD_EMAIL, LOCAL_BOARD_ID, shouldSeedLocalBoard } from "./bootstrap-logic";
 

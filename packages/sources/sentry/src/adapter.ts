@@ -27,7 +27,7 @@ type SentryIssueDetail = {
  *
  * Reads SENTRY_WEBHOOK_SECRET via the route handler (passed to
  * verifyWebhook). Reads SENTRY_API_TOKEN via getSentryToken() from
- * @sentry-fixer-bot/api/run/sentry-runner (existing helper that
+ * @alertforge/api/run/sentry-runner (existing helper that
  * prefers env then falls back to the sentry CLI's stored token).
  *
  * P3 will refactor consumers to pass token via SourceDeps.apiToken;
@@ -79,7 +79,7 @@ const adapter: SourceAdapter = {
   parseUrl: parseSentryUrl,
 
   async fetchByExternalId(sourceProject, externalId, _deps: SourceDeps): Promise<NormalizedAlert> {
-    const { getSentryToken } = await import("@sentry-fixer-bot/api/run/sentry-runner");
+    const { getSentryToken } = await import("@alertforge/api/run/sentry-runner");
     const token = await getSentryToken();
     if (!token) {
       throw new Error("Sentry not configured — set SENTRY_API_TOKEN or run `sentry auth login`");

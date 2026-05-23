@@ -35,7 +35,7 @@ import type { TriageResult } from "@alertforge/step-classify";
 import type { AppendRunLog, bindStreamToRunLogs as BindStreamFn } from "@alertforge/step-fix-agent";
 // Lazy default impls — declared in module scope but resolved on first
 // call. @alertforge/step-fix-agent/index re-exports `spawn.ts` which
-// pulls @sentry-fixer-bot/env/server and validates DB / Sentry env at
+// pulls @alertforge/env/server and validates DB / Sentry env at
 // module load; importing it eagerly here would break env-less unit
 // tests. Tests inject their own spawnAgentFn so the lazy resolver
 // never runs.

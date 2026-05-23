@@ -1,20 +1,20 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-import { Checkbox } from "@sentry-fixer-bot/ui/components/checkbox";
+import { Button } from "@alertforge/ui/components/button";
+import { Checkbox } from "@alertforge/ui/components/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@sentry-fixer-bot/ui/components/dialog";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+} from "@alertforge/ui/components/dialog";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";

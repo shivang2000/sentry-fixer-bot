@@ -38,9 +38,9 @@ export async function openPr(input: OpenPrInput): Promise<OpenPrResult> {
   await runStrict(input.cwd, [
     "git",
     "-c",
-    "user.email=sentry-fixer-bot@users.noreply.github.com",
+    "user.email=alertforge@users.noreply.github.com",
     "-c",
-    "user.name=sentry-fixer-bot",
+    "user.name=alertforge",
     "commit",
     "-m",
     input.title,

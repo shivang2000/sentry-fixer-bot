@@ -1,10 +1,10 @@
 {
-  "extends": "@sentry-fixer-bot/config/tsconfig.base.json",
+  "extends": "@alertforge/config/tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
-      "@sentry-fixer-bot/ui/*": ["./src/*"]
+      "@alertforge/ui/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

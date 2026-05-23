@@ -149,9 +149,9 @@ export async function runCommitPushOnlyStep(
     [
       "git",
       "-c",
-      "user.email=sentry-fixer-bot@users.noreply.github.com",
+      "user.email=alertforge@users.noreply.github.com",
       "-c",
-      "user.name=sentry-fixer-bot",
+      "user.name=alertforge",
       "commit",
       "-m",
       commitMsg,

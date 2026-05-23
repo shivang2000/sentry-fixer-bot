@@ -21,7 +21,7 @@
  *   7. agent retry loop — first attempt fails tests, second passes; assert 2 spawns
  */
 
-// Stub env validation BEFORE anything imports @sentry-fixer-bot/env.
+// Stub env validation BEFORE anything imports @alertforge/env.
 import "./env-preload";
 
 import { describe, expect, it } from "bun:test";

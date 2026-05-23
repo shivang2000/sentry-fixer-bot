@@ -1,10 +1,10 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@sentry-fixer-bot/ui/components/dropdown-menu";
+} from "@alertforge/ui/components/dropdown-menu";
 import { Moon, Sun } from "lucide-react";
 
 import { useTheme } from "@/components/theme-provider";

@@ -1,12 +1,12 @@
-import { Checkbox } from "@sentry-fixer-bot/ui/components/checkbox";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { Checkbox } from "@alertforge/ui/components/checkbox";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -77,7 +77,7 @@ export function AdvancedToggles({ value, onChange, disabled, defaultOpen }: Prop
               disabled={disabled}
               onCheckedChange={(c) => set("followUpLoop", c === true)}
             />
-            <Label htmlFor={idLoop}>Override preset: follow-up /sfb loop</Label>
+            <Label htmlFor={idLoop}>Override preset: follow-up /alertforge loop</Label>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={idScan}>Secret-scan strictness</Label>

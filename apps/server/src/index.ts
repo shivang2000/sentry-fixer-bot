@@ -1,10 +1,10 @@
+import { createContext } from "@alertforge/api/context";
+import { appRouter } from "@alertforge/api/routers/index";
+import { auth } from "@alertforge/auth";
+import { bootstrapLocalTrustedAdmin, maybeEmitClaimUrl } from "@alertforge/auth/bootstrap";
+import { runStartupDoctor } from "@alertforge/auth/doctor";
+import { env } from "@alertforge/env/server";
 import { trpcServer } from "@hono/trpc-server";
-import { createContext } from "@sentry-fixer-bot/api/context";
-import { appRouter } from "@sentry-fixer-bot/api/routers/index";
-import { auth } from "@sentry-fixer-bot/auth";
-import { bootstrapLocalTrustedAdmin, maybeEmitClaimUrl } from "@sentry-fixer-bot/auth/bootstrap";
-import { runStartupDoctor } from "@sentry-fixer-bot/auth/doctor";
-import { env } from "@sentry-fixer-bot/env/server";
 import { initLogger } from "evlog";
 import { type BetterAuthInstance, createAuthMiddleware } from "evlog/better-auth";
 import { type EvlogVariables, evlog } from "evlog/hono";
@@ -13,6 +13,7 @@ import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import "./register-adapters";
 import { bootstrapDefaults } from "./bootstrap-defaults";
+import { applyLegacyPathSymlinks } from "./legacy-path-symlinks";
 import { boardClaim } from "./routes/board-claim";
 import { chatWs, websocket } from "./routes/chat-ws";
 import { githubWebhook } from "./routes/github-webhook";
@@ -20,8 +21,15 @@ import { health } from "./routes/health";
 import { webhooksGeneric } from "./routes/webhooks-generic";
 
 initLogger({
-  env: { service: "sentry-fixer-bot-server" },
+  env: { service: "alertforge-server" },
 });
+
+// One-release back-compat: create symlinks /var/lib/sfb → /var/lib/alertforge
+// and similar so operators still running scripts that reference the old
+// paths see consistent state during cutover. Idempotent + tolerates
+// EACCES, so it's safe in container/dev modes where the server doesn't
+// own /var or /etc. Removed in alertforge-2.1.0 (P9).
+await applyLegacyPathSymlinks();
 
 await bootstrapLocalTrustedAdmin();
 await runStartupDoctor();
@@ -31,8 +39,8 @@ await bootstrapDefaults();
 // Container mode runs a single Bun process, so we also start the worker
 // loop in-band. pg-boss handlers + the Sentry-poll cron all hang off the
 // same boss instance the webhook handler publishes to. EC2 mode keeps the
-// dedicated sfb-worker.service.
-if (process.env.SFB_RUN_MODE === "container") {
+// dedicated alertforge-worker.service.
+if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
   await import("./worker/index");
 }
 

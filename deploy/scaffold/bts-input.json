@@ -1,5 +1,5 @@
 {
-  "projectName": "sentry-fixer-bot",
+  "projectName": "alertforge",
   "frontend": ["tanstack-router"],
   "backend": "hono",
   "runtime": "bun",

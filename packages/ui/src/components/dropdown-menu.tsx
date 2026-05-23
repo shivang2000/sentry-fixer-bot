@@ -1,7 +1,7 @@
 "use client";
 
+import { cn } from "@alertforge/ui/lib/utils";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { cn } from "@sentry-fixer-bot/ui/lib/utils";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 

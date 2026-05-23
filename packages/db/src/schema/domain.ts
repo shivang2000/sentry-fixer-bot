@@ -103,8 +103,8 @@ export const prs = pgTable(
     // Review-gate state machine.
     //   none         — no review run yet (legacy rows) or review approved.
     //   waiting_human — reviewer found a blocker, PR flipped to draft,
-    //                   waiting for a /sfb-prefixed comment from an
-    //                   allow-listed reviewer.
+    //                   waiting for an /alertforge-prefixed (or legacy
+    //                   /sfb) comment from an allow-listed reviewer.
     //   in_progress  — follow-up worker is actively applying changes.
     humanReviewState: text("human_review_state").notNull().default("none"),
     // Highest comment timestamp the follow-up loop has already acted on.

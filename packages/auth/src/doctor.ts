@@ -1,6 +1,6 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { user } from "@sentry-fixer-bot/db/schema/auth";
-import { env } from "@sentry-fixer-bot/env/server";
+import { createDb } from "@alertforge/db";
+import { user } from "@alertforge/db/schema/auth";
+import { env } from "@alertforge/env/server";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { LOCAL_BOARD_ID } from "./bootstrap-logic";
 import { doctorVerdict } from "./doctor-logic";
@@ -23,7 +23,7 @@ export async function runStartupDoctor(opts?: {
     deploymentMode: env.DEPLOYMENT_MODE,
     bind: env.SERVER_BIND,
     publicBaseUrl: env.PUBLIC_BASE_URL,
-    bootstrapAdminEmail: env.SFB_BOOTSTRAP_ADMIN_EMAIL,
+    bootstrapAdminEmail: env.ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL,
     realAdminCount,
   });
 

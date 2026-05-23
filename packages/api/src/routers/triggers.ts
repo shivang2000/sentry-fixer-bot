@@ -1,9 +1,9 @@
 import { type Logger, registry } from "@alertforge/core";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts, prs, runs } from "@sentry-fixer-bot/db/schema/domain";
-import { channelConfigs, triggers } from "@sentry-fixer-bot/db/schema/triggers";
-import { buildDigest } from "@sentry-fixer-bot/step-daily-digest";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { alerts, prs, runs } from "@alertforge/db/schema/domain";
+import { channelConfigs, triggers } from "@alertforge/db/schema/triggers";
+import { buildDigest } from "@alertforge/step-daily-digest";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
@@ -13,7 +13,7 @@ import { adminProcedure, router } from "../index";
 let bossInstance: PgBoss | null = null;
 async function getBoss(): Promise<PgBoss> {
   if (bossInstance) return bossInstance;
-  const { env } = await import("@sentry-fixer-bot/env/server");
+  const { env } = await import("@alertforge/env/server");
   bossInstance = new PgBoss({ connectionString: env.DATABASE_URL });
   await bossInstance.start();
   return bossInstance;

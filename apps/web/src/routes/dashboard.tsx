@@ -4,7 +4,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
+} from "@alertforge/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Check, X } from "lucide-react";

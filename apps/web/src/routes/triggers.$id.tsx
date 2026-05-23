@@ -1,12 +1,12 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@sentry-fixer-bot/ui/components/tabs";
+} from "@alertforge/ui/components/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@alertforge/ui/components/tabs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Plus } from "lucide-react";

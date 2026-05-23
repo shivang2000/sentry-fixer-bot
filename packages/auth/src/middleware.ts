@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import type { Context, Next } from "hono";
 import { LOCAL_BOARD_EMAIL, LOCAL_BOARD_ID } from "./bootstrap-logic";
 import { auth } from "./index";

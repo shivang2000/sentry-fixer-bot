@@ -1,4 +1,4 @@
-import { getSentryToken } from "@sentry-fixer-bot/api/run/sentry-runner";
+import { getSentryToken } from "@alertforge/api/run/sentry-runner";
 
 const SENTRY_BASE = "https://sentry.io/api/0";
 

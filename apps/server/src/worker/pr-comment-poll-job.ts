@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { prs } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { prs } from "@alertforge/db/schema/domain";
 import { eq, or } from "drizzle-orm";
 import { listPrComments } from "../github/pr-ops";
 import { log } from "../log";
@@ -7,10 +7,11 @@ import { dispatchPrComment } from "../routes/github-webhook";
 import { appendRunLog } from "../runs/log";
 
 /**
- * Cron fallback that polls open sentry-fixer-bot PRs for /sfb comments
- * the GitHub App webhook may have missed (or that arrive while the
- * webhook is unconfigured). Same dispatch path as the webhook so the
- * /sfb prefix + reviewer allow-list filters apply identically.
+ * Cron fallback that polls open alertforge PRs for /alertforge (or
+ * legacy /sfb) comments the GitHub App webhook may have missed (or
+ * that arrive while the webhook is unconfigured). Same dispatch path
+ * as the webhook so the prefix + reviewer allow-list filters apply
+ * identically.
  *
  * Scope: PRs in `waiting_human` (reviewer left a blocker) or `none`
  * state (reviewer might still want to amend a clean PR). We skip
@@ -35,7 +36,7 @@ export async function processPrCommentPollJob(): Promise<void> {
     .limit(200);
 
   if (rows.length === 0) {
-    log.info("[pr-comment-poll] tick — no PRs awaiting /sfb input.");
+    log.info("[pr-comment-poll] tick — no PRs awaiting /alertforge input.");
     return;
   }
 
@@ -74,7 +75,7 @@ export async function processPrCommentPollJob(): Promise<void> {
           runId: pr.runId,
           level: "info",
           source: "pr-comment-poll",
-          message: `Cron tick dispatched ${prDispatched} /sfb comment(s) for PR #${pr.number}.`,
+          message: `Cron tick dispatched ${prDispatched} /alertforge comment(s) for PR #${pr.number}.`,
         });
       }
     } catch (err) {

@@ -1,5 +1,5 @@
 {
-  "name": "sentry-fixer-bot",
+  "name": "alertforge",
   "private": true,
   "workspaces": {
     "packages": [
@@ -30,26 +30,26 @@
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @sentry-fixer-bot/db db:push",
-    "db:studio": "turbo -F @sentry-fixer-bot/db db:studio",
-    "db:generate": "turbo -F @sentry-fixer-bot/db db:generate",
-    "db:migrate": "turbo -F @sentry-fixer-bot/db db:migrate",
-    "db:seed": "turbo -F @sentry-fixer-bot/db db:seed",
-    "db:start": "turbo -F @sentry-fixer-bot/db db:start",
-    "db:watch": "turbo -F @sentry-fixer-bot/db db:watch",
-    "db:stop": "turbo -F @sentry-fixer-bot/db db:stop",
-    "db:down": "turbo -F @sentry-fixer-bot/db db:down",
+    "db:push": "turbo -F @alertforge/db db:push",
+    "db:studio": "turbo -F @alertforge/db db:studio",
+    "db:generate": "turbo -F @alertforge/db db:generate",
+    "db:migrate": "turbo -F @alertforge/db db:migrate",
+    "db:seed": "turbo -F @alertforge/db db:seed",
+    "db:start": "turbo -F @alertforge/db db:start",
+    "db:watch": "turbo -F @alertforge/db db:watch",
+    "db:stop": "turbo -F @alertforge/db db:stop",
+    "db:down": "turbo -F @alertforge/db db:down",
     "check": "biome check --write .",
     "prepare": "husky"
   },
   "dependencies": {
-    "@sentry-fixer-bot/env": "workspace:*",
+    "@alertforge/env": "workspace:*",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/bun": "catalog:",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.2",

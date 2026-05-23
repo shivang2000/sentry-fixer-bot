@@ -1,6 +1,6 @@
-import { auth } from "@sentry-fixer-bot/auth";
-import { LOCAL_BOARD_EMAIL, LOCAL_BOARD_ID } from "@sentry-fixer-bot/auth/bootstrap-logic";
-import { env } from "@sentry-fixer-bot/env/server";
+import { auth } from "@alertforge/auth";
+import { LOCAL_BOARD_EMAIL, LOCAL_BOARD_ID } from "@alertforge/auth/bootstrap-logic";
+import { env } from "@alertforge/env/server";
 import type { Context as HonoContext } from "hono";
 
 export type CreateContextOptions = {

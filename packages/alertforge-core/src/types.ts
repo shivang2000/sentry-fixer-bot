@@ -130,7 +130,8 @@ export type CtxField =
   | "review"
   | "follow_up"
   | "notifications"
-  // P3c.3: follow-up pipeline carries the reviewer's `/sfb` comment +
+  // P3c.3: follow-up pipeline carries the reviewer's `/alertforge` (or
+  // legacy `/sfb`) comment +
   // pre-existing PR target through the same step graph the primary
   // worker uses. `instruction` is the comment payload (body, author,
   // commentId, createdAt) that wrapFollowupFixAgentStep feeds into the

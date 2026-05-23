@@ -1,4 +1,4 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Dialog,
   DialogContent,
@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@sentry-fixer-bot/ui/components/dialog";
+} from "@alertforge/ui/components/dialog";
 import { useState } from "react";
 
 type Props = {

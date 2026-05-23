@@ -1,4 +1,4 @@
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { Label } from "@alertforge/ui/components/label";
 import { useId } from "react";
 
 /**

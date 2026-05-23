@@ -1,6 +1,6 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 
 export type Workspace = {
   dir: string;
@@ -10,16 +10,16 @@ export type Workspace = {
 
 /**
  * Callback the consumer supplies to resolve a GitHub token for clone +
- * fetch. Injecting it keeps the step package free of @sentry-fixer-bot/
+ * fetch. Injecting it keeps the step package free of @alertforge/
  * server internals; apps/server passes its resolveGithubToken from
  * src/github/auth.ts.
  */
 export type ResolveGithubToken = () => Promise<string>;
 
 function cacheDirFor(repo: string): string {
-  // /sfb/state/repos/<owner>__<name>.git — bare-ish working clone,
+  // /alertforge/state/repos/<owner>__<name>.git — bare-ish working clone,
   // reused across runs. Per-run worktree branches off this.
-  const base = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/repos`;
+  const base = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/repos`;
   return join(base, repo.replace("/", "__"));
 }
 
@@ -49,7 +49,7 @@ async function spawn(
 
 /**
  * Create a per-run isolated workspace using a cached repo clone +
- * `git worktree`. First run for a repo clones to /sfb/state/repos/
+ * `git worktree`. First run for a repo clones to /alertforge/state/repos/
  * <owner>__<name>; later runs `git fetch` + `worktree add` for a fresh
  * branch off the just-fetched base. The cache survives container
  * restarts.
@@ -65,7 +65,10 @@ export async function createWorkspace(input: {
   const token = await input.resolveToken();
   const cloneUrl = `https://x-access-token:${token}@github.com/${input.repo}.git`;
   const cache = cacheDirFor(input.repo);
-  const branch = `sfb/${input.runId}`;
+  // alertforge/<runId> is the canonical post-rename prefix. Legacy
+  // `sfb/<runId>` branches opened by the bot before P7 still re-attach
+  // correctly via attachWorkspace (which just uses input.branch verbatim).
+  const branch = `alertforge/${input.runId}`;
   const dir = join(env.WORK_DIR, input.runId);
 
   // First-time clone.
@@ -124,10 +127,13 @@ export async function createWorkspace(input: {
 
 /**
  * Re-attach a worktree to an EXISTING branch in the cached clone. Used
- * by the pr-followup worker: a human reviewer left a `/sfb` comment on
- * a PR the bot opened, and we need to apply more changes to the same
- * branch. The branch ref was preserved by `createWorkspace`'s cleanup
- * (worktree removed, branch kept).
+ * by the pr-followup worker: a human reviewer left an `/alertforge` (or
+ * legacy `/sfb`) comment on a PR the bot opened, and we need to apply
+ * more changes to the same branch. The branch ref was preserved by
+ * `createWorkspace`'s cleanup (worktree removed, branch kept).
+ *
+ * The input.branch is whatever was recorded on the prs row, so legacy
+ * `sfb/<runId>` and new `alertforge/<runId>` both round-trip cleanly.
  *
  * Fetches origin first so we pick up anything pushed to the branch
  * upstream since the original run.

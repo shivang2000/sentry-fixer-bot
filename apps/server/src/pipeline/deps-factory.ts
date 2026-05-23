@@ -13,9 +13,9 @@
  */
 
 import { registry, type S3PutClient, type StepDeps } from "@alertforge/core";
+import { createDb } from "@alertforge/db";
+import { env } from "@alertforge/env/server";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { createDb } from "@sentry-fixer-bot/db";
-import { env } from "@sentry-fixer-bot/env/server";
 import { resolveGithubToken } from "../github/auth";
 import { log } from "../log";
 import { appendRunLog } from "../runs/log";

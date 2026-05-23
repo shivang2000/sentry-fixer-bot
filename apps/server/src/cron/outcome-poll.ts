@@ -17,8 +17,8 @@
  * worker + schedule in the worker bootstrap.
  */
 
-import { createDb } from "@sentry-fixer-bot/db";
-import { prs } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { prs } from "@alertforge/db/schema/domain";
 import {
   type BotPrRow,
   type GithubClient,
@@ -26,7 +26,7 @@ import {
   type PrOutcome,
   pollOutcomes,
   type ReviewCommentRecord,
-} from "@sentry-fixer-bot/step-outcome-poll";
+} from "@alertforge/step-outcome-poll";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { getInstallationOctokit } from "../github/app-auth";
 import { log } from "../log";

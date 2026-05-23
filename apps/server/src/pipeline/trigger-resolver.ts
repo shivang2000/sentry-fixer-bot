@@ -19,9 +19,9 @@
  */
 
 import { DEFAULT_MODELS, type Preset, type TriggerRow } from "@alertforge/core";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { triggers } from "@sentry-fixer-bot/db/schema/triggers";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { triggers } from "@alertforge/db/schema/triggers";
 import { and, eq } from "drizzle-orm";
 
 export interface ResolveTriggerInput {

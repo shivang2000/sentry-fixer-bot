@@ -34,7 +34,7 @@ export const CATALOG: CatalogEntry[] = [
     description: "Read files under a configured allowlist path.",
     transport: "stdio",
     command: "npx",
-    argsTemplate: ["-y", "@modelcontextprotocol/server-filesystem", "/var/lib/sfb/agent-fs"],
+    argsTemplate: ["-y", "@modelcontextprotocol/server-filesystem", "/var/lib/alertforge/agent-fs"],
     envSchema: {},
     tags: ["dev"],
     homepage: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",

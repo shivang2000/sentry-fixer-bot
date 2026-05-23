@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { mcpInstalls, mcpSecrets } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { mcpInstalls, mcpSecrets } from "@alertforge/db/schema/admin";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../index";

@@ -23,8 +23,8 @@ export function doctorVerdict(input: {
   const isPublicLike = input.bind !== "loopback" && input.bind !== "tailnet";
   if (isPublicLike && input.realAdminCount === 0 && !input.bootstrapAdminEmail) {
     return (
-      "authenticated + public-like bind has no real admin and no SFB_BOOTSTRAP_ADMIN_EMAIL. " +
-      "Either complete first-signup over a trusted channel first, set SFB_BOOTSTRAP_ADMIN_EMAIL, " +
+      "authenticated + public-like bind has no real admin and no ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL. " +
+      "Either complete first-signup over a trusted channel first, set ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL, " +
       "or use the board-claim URL."
     );
   }

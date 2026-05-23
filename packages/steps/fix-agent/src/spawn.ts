@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 
 export type SpawnResult = {
   exitCode: number;
@@ -85,7 +85,9 @@ export async function spawnClaudeAgent(input: SpawnOptions): Promise<SpawnResult
       ...(env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY } : {}),
       // Pin HOME to the state volume so the session creds resolve.
       // input.home wins if provided (per-run isolated home).
-      HOME: input.home ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`,
+      HOME:
+        input.home ??
+        `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`,
     },
     stdout: "pipe",
     stderr: "pipe",

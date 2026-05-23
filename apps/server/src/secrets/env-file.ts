@@ -1,30 +1,35 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import { isValidEnvKey, shellQuote } from "./shell-quote";
 
-const PROD_FILE = "/etc/sfb/env";
+const PROD_FILE = "/etc/alertforge/env";
 const DEV_FILE = "apps/server/.env.local";
 
 function targetFile(): string {
   // Container mode puts the env file on the state volume so it survives a
-  // restart. Honour an explicit SFB_ENV_FILE override (setup.sh sets it),
-  // otherwise default to /sfb/state/etc/env.
-  if (process.env.SFB_RUN_MODE === "container") {
-    return process.env.SFB_ENV_FILE ?? "/sfb/state/etc/env";
+  // restart. Honour an explicit ALERTFORGE_ENV_FILE (or legacy SFB_ENV_FILE)
+  // override (setup.sh sets it), otherwise default to /alertforge/state/etc/env.
+  if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
+    return (
+      process.env.ALERTFORGE_ENV_FILE ?? process.env.SFB_ENV_FILE ?? "/alertforge/state/etc/env"
+    );
   }
   return env.NODE_ENV === "production" ? PROD_FILE : DEV_FILE;
 }
 
 function shouldReloadSystemd(): boolean {
-  return env.NODE_ENV === "production" && process.env.SFB_RUN_MODE !== "container";
+  return (
+    env.NODE_ENV === "production" &&
+    (process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) !== "container"
+  );
 }
 
 /**
  * Set or replace a key in the env file. Atomic via tmp+rename. In production
- * (NODE_ENV=production) we also `systemctl reload-or-restart sfb-server.service`
+ * (NODE_ENV=production) we also `systemctl reload-or-restart alertforge-server.service`
  * so the new value is in effect for the next spawn. In container mode
- * (SFB_RUN_MODE=container) we skip systemctl and rely on in-process mutation
+ * (ALERTFORGE_RUN_MODE=container) we skip systemctl and rely on in-process mutation
  * of process.env — chat/agent subprocesses inherit the new env at spawn time.
  */
 export async function setEnvSecret(key: string, value: string): Promise<void> {
@@ -48,7 +53,7 @@ export async function setEnvSecret(key: string, value: string): Promise<void> {
 }
 
 async function reloadServiceOrThrow(): Promise<void> {
-  const proc = Bun.spawn(["systemctl", "reload-or-restart", "sfb-server.service"], {
+  const proc = Bun.spawn(["systemctl", "reload-or-restart", "alertforge-server.service"], {
     stdout: "pipe",
     stderr: "pipe",
   });

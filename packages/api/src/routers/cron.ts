@@ -38,7 +38,7 @@ let boss: PgBoss | null = null;
 async function getBoss(): Promise<PgBoss> {
   if (boss) return boss;
   // Lazy import so the test runner can load this module without DATABASE_URL.
-  const { env } = await import("@sentry-fixer-bot/env/server");
+  const { env } = await import("@alertforge/env/server");
   boss = new PgBoss({ connectionString: env.DATABASE_URL });
   await boss.start();
   return boss;

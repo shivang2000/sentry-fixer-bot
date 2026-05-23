@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { runs } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { runs } from "@alertforge/db/schema/domain";
 import { eq } from "drizzle-orm";
 
 export type RunInsert = typeof runs.$inferInsert;

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { env } from "@alertforge/env/server";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
-import { env } from "@sentry-fixer-bot/env/server";
 
 let cached: Octokit | null = null;
 let cachedToken: { token: string; expiresAt: number } | null = null;

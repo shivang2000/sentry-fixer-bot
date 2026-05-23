@@ -1,13 +1,13 @@
-import { Checkbox } from "@sentry-fixer-bot/ui/components/checkbox";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { Checkbox } from "@alertforge/ui/components/checkbox";
+import { Input } from "@alertforge/ui/components/input";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { useId } from "react";
 
 /**

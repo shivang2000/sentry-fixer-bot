@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 
 export type PtyHandle = {
   proc: ChildProcessWithoutNullStreams;
@@ -70,7 +70,7 @@ export function spawnPtyCommand(input: {
  * kiosk mode was too restrictive (no way to inspect creds, install
  * MCPs, edit files, run agent dry-runs).
  *
- * The shell inherits the env file's HOME (= /sfb/state/home in
+ * The shell inherits the env file's HOME (= /alertforge/state/home in
  * container mode) so any dotfile the user creates (.bash_history,
  * .claude/, .config/gh/, future .codex/.opencloud/) survives a
  * crash + container recreate.
@@ -94,7 +94,7 @@ export function spawnClaudeInteractive(input: {
   // because they run unattended; chat is interactive so the per-action
   // approval prompts are fine.
   const claudeModel = env.CLAUDE_MODEL;
-  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   // Force HOME inside the inner shell — bash --login reads /etc/profile
   // and ~/.profile which can reset HOME to /root if the runuser PAM
   // session set it that way. Re-exporting after profile load guarantees
@@ -108,9 +108,9 @@ export function spawnClaudeInteractive(input: {
   if (env.ANTHROPIC_API_KEY) extraEnv.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
   // Pin HOME to the state volume — bun's process.env.HOME is /root in
   // container mode (runuser sets it from /etc/passwd before exec'ing the
-  // server). The login flow writes creds under /sfb/state/home; readers
+  // server). The login flow writes creds under /alertforge/state/home; readers
   // must point at the same path.
-  extraEnv.HOME = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  extraEnv.HOME = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   const handle = spawnPtyCommand({
     cmd: "/bin/bash",
     args: ["-c", initLine],

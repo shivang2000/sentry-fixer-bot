@@ -1,4 +1,4 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
@@ -6,7 +6,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
+} from "@alertforge/ui/components/card";
 import {
   Table,
   TableBody,
@@ -14,8 +14,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@sentry-fixer-bot/ui/components/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@sentry-fixer-bot/ui/components/tabs";
+} from "@alertforge/ui/components/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@alertforge/ui/components/tabs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { ExternalLink, Trash2 } from "lucide-react";
@@ -159,7 +159,7 @@ function McpsPage() {
         <TabsContent value="run" className="mt-4">
           <CommandRunner
             title="Install an MCP via npm / npx"
-            description="Paste any npm/npx/pnpm/bun/git command. Runs as sfb-runner against /sfb/state/home so installs persist on the state volume."
+            description="Paste any npm/npx/pnpm/bun/git command. Runs as alertforge-runner against /alertforge/state/home so installs persist on the state volume."
             placeholder="npx -y @sentry/mcp-server --help"
             onSuccess={() => qc.invalidateQueries({ queryKey: trpc.mcps.installed.queryKey() })}
           />
@@ -177,7 +177,7 @@ function McpsPage() {
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         title={`Uninstall ${deleteTarget?.name ?? ""}?`}
-        description="Secrets in /etc/sfb/env are not removed. Remove them via the settings page."
+        description="Secrets in /etc/alertforge/env are not removed. Remove them via the settings page."
         confirmLabel="Uninstall"
         variant="destructive"
         onConfirm={async () => {

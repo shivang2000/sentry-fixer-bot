@@ -168,7 +168,7 @@ export function renderPrBody(input: {
   findings: SecretFinding[];
 }): string {
   const lines: string[] = [];
-  lines.push("**sentry-fixer-bot** drafted this fix for a Sentry alert.");
+  lines.push("**Alertforge** drafted this fix for a Sentry alert.");
   lines.push("");
   lines.push(`> ${input.alert}`);
   lines.push("");

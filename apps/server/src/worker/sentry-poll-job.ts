@@ -1,7 +1,7 @@
+import { getSentryOrgSlug, getSentryToken } from "@alertforge/api/run/sentry-runner";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
 import { upsertAlert } from "@alertforge/source-sentry";
-import { getSentryOrgSlug, getSentryToken } from "@sentry-fixer-bot/api/run/sentry-runner";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { eq } from "drizzle-orm";
 import { log } from "../log";
 import { publishJob } from "../queue/boss";

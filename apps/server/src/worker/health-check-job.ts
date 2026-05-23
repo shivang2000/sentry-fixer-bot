@@ -1,4 +1,4 @@
-import { computeSetupStatus, writeHealthSnapshot } from "@sentry-fixer-bot/api/routers/setup";
+import { computeSetupStatus, writeHealthSnapshot } from "@alertforge/api/routers/setup";
 import { log } from "../log";
 
 /**

@@ -4,9 +4,10 @@
  * Differs from `wrapFixAgentStep` (primary path) in three ways:
  *   1. Prompt content — the primary path renders a fresh agent prompt
  *      from the alert + stack trace; the followup path renders a
- *      reviewer-instruction prompt (alert title + the reviewer's `/sfb`
- *      body). Legacy `renderFollowupPrompt` in pr-followup-job.ts is
- *      the source of truth; we preserve it verbatim here.
+ *      reviewer-instruction prompt (alert title + the reviewer's
+ *      `/alertforge` or legacy `/sfb` body). Legacy `renderFollowupPrompt`
+ *      in pr-followup-job.ts is the source of truth; we preserve it
+ *      verbatim here.
  *   2. Stream source tag — `followup-stream` instead of `agent-stream`
  *      so /runs/<id> can distinguish the followup pass from the
  *      original agent run.
@@ -247,7 +248,7 @@ export function skipFollowupFixAgentIfFactory(handle: PrGuardHandle) {
 export function wrapFollowupFixAgentStep(opts: WrapFollowupFixAgentOpts): PipelineStep {
   return {
     name: "followup-fix-agent",
-    description: "Spawn claude with reviewer's /sfb instruction + retry loop",
+    description: "Spawn claude with reviewer's /alertforge instruction + retry loop",
     skipIf: skipFollowupFixAgentIfFactory(opts.prGuardHandle),
     async run(ctx, cfg, deps) {
       await runFollowupFixAgentStep(ctx, cfg, deps, opts);
@@ -258,16 +259,23 @@ export function wrapFollowupFixAgentStep(opts: WrapFollowupFixAgentOpts): Pipeli
 // ---------- helpers ----------
 
 /**
- * Strip the leading `/sfb` so claude doesn't see its own dispatch
- * prefix. Legacy parity — matches `stripSfbPrefix` in
- * pr-followup-job.ts verbatim.
+ * Strip the leading `/alertforge` or legacy `/sfb` so claude doesn't
+ * see its own dispatch prefix. Recognises both prefixes during the
+ * 2.0.x back-compat window; P9 drops the legacy arm.
+ *
+ * Exported as `stripSfbPrefix` for back-compat (callers across the
+ * codebase use that name); new code should prefer the alias
+ * `stripCommandPrefix` defined below.
  */
 export function stripSfbPrefix(body: string): string {
   return body
     .trim()
-    .replace(/^\/sfb\s*/i, "")
+    .replace(/^\/(?:sfb|alertforge)\s*/i, "")
     .trim();
 }
+
+/** Forward-looking name for stripSfbPrefix. */
+export const stripCommandPrefix = stripSfbPrefix;
 
 /**
  * Preserved verbatim from legacy `renderFollowupPrompt` in
@@ -293,7 +301,7 @@ export function renderFollowupPrompt(input: {
 You are a software engineer responding to a human reviewer's feedback
 on a PR you previously opened. Your earlier review was found to have
 issues; the reviewer (@${input.reviewer}) has left an instruction via
-the \`/sfb\` command. Apply that instruction faithfully.
+the \`/alertforge\` command. Apply that instruction faithfully.
 
 ORIGINAL ALERT (for context): ${input.alertTitle}
 

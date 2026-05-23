@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { invites } from "@sentry-fixer-bot/db/schema/invites";
+import { createDb } from "@alertforge/db";
+import { invites } from "@alertforge/db/schema/invites";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";

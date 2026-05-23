@@ -1,10 +1,6 @@
-import { Separator } from "@sentry-fixer-bot/ui/components/separator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@sentry-fixer-bot/ui/components/sidebar";
-import { Toaster } from "@sentry-fixer-bot/ui/components/sonner";
+import { Separator } from "@alertforge/ui/components/separator";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@alertforge/ui/components/sidebar";
+import { Toaster } from "@alertforge/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
@@ -29,10 +25,7 @@ export interface RouterAppContext {
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootComponent,
   head: () => ({
-    meta: [
-      { title: "sentry-fixer-bot" },
-      { name: "description", content: "sentry-fixer-bot — V2 admin" },
-    ],
+    meta: [{ title: "Alertforge" }, { name: "description", content: "Alertforge — V2 admin" }],
     links: [{ rel: "icon", href: "/favicon.ico" }],
   }),
 });

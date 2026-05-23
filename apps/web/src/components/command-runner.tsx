@@ -1,11 +1,11 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
+} from "@alertforge/ui/components/card";
 import { useMutation } from "@tanstack/react-query";
 import { Play, Terminal } from "lucide-react";
 import { useState } from "react";

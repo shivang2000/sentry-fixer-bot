@@ -1,13 +1,13 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+} from "@alertforge/ui/components/card";
+import { Input } from "@alertforge/ui/components/input";
+import { Label } from "@alertforge/ui/components/label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -99,7 +99,7 @@ function HomeWizard() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header>
-        <h1 className="font-semibold text-xl">Welcome to sentry-fixer-bot</h1>
+        <h1 className="font-semibold text-xl">Welcome to Alertforge</h1>
         <p className="text-sm text-zinc-500">
           Four-step setup. Each step persists on the state volume so a container restart won't lose
           anything.
@@ -330,9 +330,11 @@ function GithubWebhookCard() {
       title="GitHub PR webhook"
       description={
         <>
-          Optional. Lets reviewers say <code className="rounded bg-zinc-800 px-1">/sfb apply</code>{" "}
-          on a PR comment and have the bot apply changes within seconds. Without it, a 15-minute
-          cron polls comments as a fallback.
+          Optional. Lets reviewers say{" "}
+          <code className="rounded bg-zinc-800 px-1">/alertforge apply</code> (legacy{" "}
+          <code className="rounded bg-zinc-800 px-1">/sfb</code> still accepted) on a PR comment and
+          have the bot apply changes within seconds. Without it, a 15-minute cron polls comments as
+          a fallback.
         </>
       }
       url={info.data?.url ?? ""}

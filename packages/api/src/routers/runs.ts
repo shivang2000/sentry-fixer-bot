@@ -1,7 +1,7 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts, prs, runLogs, runs } from "@sentry-fixer-bot/db/schema/domain";
-import { triggers } from "@sentry-fixer-bot/db/schema/triggers";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { alerts, prs, runLogs, runs } from "@alertforge/db/schema/domain";
+import { triggers } from "@alertforge/db/schema/triggers";
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gt, gte, sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
@@ -17,7 +17,7 @@ function windowToCutoff(w: z.infer<typeof WindowSchema>): Date {
 let bossInstance: PgBoss | null = null;
 async function getBoss(): Promise<PgBoss> {
   if (bossInstance) return bossInstance;
-  const { env } = await import("@sentry-fixer-bot/env/server");
+  const { env } = await import("@alertforge/env/server");
   bossInstance = new PgBoss({ connectionString: env.DATABASE_URL });
   await bossInstance.start();
   return bossInstance;

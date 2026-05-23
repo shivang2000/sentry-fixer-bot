@@ -7,7 +7,7 @@
  *
  *   bun run write-sentry-secret.ts <token> <org-slug>
  */
-import { setEnvSecret } from "@sentry-fixer-bot/api/secrets/env-file";
+import { setEnvSecret } from "@alertforge/api/secrets/env-file";
 
 const token = process.argv[2];
 const org = process.argv[3];
@@ -18,4 +18,4 @@ if (!token || !org) {
 
 await setEnvSecret("SENTRY_API_TOKEN", token);
 await setEnvSecret("SENTRY_ORG_SLUG", org);
-console.log("✓ Wrote SENTRY_API_TOKEN + SENTRY_ORG_SLUG to /sfb/state/etc/env.");
+console.log("✓ Wrote SENTRY_API_TOKEN + SENTRY_ORG_SLUG to /alertforge/state/etc/env.");

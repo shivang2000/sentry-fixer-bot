@@ -24,11 +24,11 @@
 
 import { rm } from "node:fs/promises";
 import { type CtxStore, DiskCtxStore, runPipeline } from "@alertforge/core";
+import { createDb } from "@alertforge/db";
+import { prs, runs } from "@alertforge/db/schema/domain";
+import { env } from "@alertforge/env/server";
 import { findAlertById, postIssueComment } from "@alertforge/source-sentry";
 import { recordUsage } from "@alertforge/step-budget";
-import { createDb } from "@sentry-fixer-bot/db";
-import { prs, runs } from "@sentry-fixer-bot/db/schema/domain";
-import { env } from "@sentry-fixer-bot/env/server";
 import { eq } from "drizzle-orm";
 import { commentOnPr, convertPrToDraft } from "../github/pr-ops";
 import { log } from "../log";
@@ -232,7 +232,7 @@ async function applyPostPipelineSideEffects(input: {
   if (budget && !budget.allowed) {
     await postIssueComment(
       input.alertSentryIssueId,
-      `sentry-fixer-bot: budget exhausted (${budget.reason ?? "unknown"}); not attempting a fix today.`,
+      `alertforge: budget exhausted (${budget.reason ?? "unknown"}); not attempting a fix today.`,
     );
     return "budget_exhausted";
   }
@@ -270,7 +270,7 @@ async function applyPostPipelineSideEffects(input: {
   if (secretScan?.blocked) {
     await postIssueComment(
       input.alertSentryIssueId,
-      `sentry-fixer-bot: agent ran but the diff contains ${secretScan.findings.length} secret-shaped finding(s). No PR opened — see /runs/${input.payload.runId}.`,
+      `alertforge: agent ran but the diff contains ${secretScan.findings.length} secret-shaped finding(s). No PR opened — see /runs/${input.payload.runId}.`,
     );
     return "error";
   }
@@ -281,7 +281,7 @@ async function applyPostPipelineSideEffects(input: {
   if (testResult && testResult.passed === false && !pr) {
     await postIssueComment(
       input.alertSentryIssueId,
-      `sentry-fixer-bot: agent produced a fix but \`${testResult.command ?? "tests"}\` failed. No PR opened. See /runs/${input.payload.runId} for the test output.`,
+      `alertforge: agent produced a fix but \`${testResult.command ?? "tests"}\` failed. No PR opened. See /runs/${input.payload.runId} for the test output.`,
     );
     return "test_failed";
   }
@@ -293,7 +293,7 @@ async function applyPostPipelineSideEffects(input: {
     if (agentOutput) {
       await postIssueComment(
         input.alertSentryIssueId,
-        `sentry-fixer-bot: agent ran but produced no code change. Triage: ${agentOutput.summary.slice(0, 500)}`,
+        `alertforge: agent ran but produced no code change. Triage: ${agentOutput.summary.slice(0, 500)}`,
       );
       return "no_change";
     }
@@ -343,7 +343,7 @@ async function applyPostPipelineSideEffects(input: {
     source: "agent",
     message: `PR opened: ${pr.url}${finalIsDraft ? " (draft)" : ""}`,
   });
-  await postIssueComment(input.alertSentryIssueId, `sentry-fixer-bot: opened PR ${pr.url}`);
+  await postIssueComment(input.alertSentryIssueId, `alertforge: opened PR ${pr.url}`);
 
   // Record token/cost usage. The wrapper doesn't track usage today so
   // we still call the legacy recordUsage with zeros; budget enforcement
@@ -373,9 +373,9 @@ function renderReviewComment(verdict: string, body: string): string {
     "---",
     "",
     "_To respond to this review, comment with one of:_",
-    "- `/sfb apply` — apply the suggested fixes and push back to this branch.",
-    "- `/sfb <free-form instruction>` — e.g. `/sfb only fix the security issue, ignore the style nit`.",
-    "_Comments without the `/sfb` prefix are treated as human-to-human chatter and ignored by the bot._",
+    "- `/alertforge apply` — apply the suggested fixes and push back to this branch.",
+    "- `/alertforge <free-form instruction>` — e.g. `/alertforge only fix the security issue, ignore the style nit`.",
+    "_(Legacy `/sfb` prefix still accepted during alertforge-2.0.x.) Comments without the `/alertforge` prefix are treated as human-to-human chatter and ignored by the bot._",
   ].join("\n");
   return `${badge}\n\n${body}${helpFooter}`;
 }

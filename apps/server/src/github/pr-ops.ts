@@ -98,7 +98,7 @@ export type PrComment = {
  * `issues/{n}/comments` endpoint (PR comments live in the issues tree)
  * rather than `gh pr view --json comments`, which returns review
  * comments scoped to file lines — different shape and we want top-level
- * comments for the /sfb follow-up path.
+ * comments for the /alertforge (or legacy /sfb) follow-up path.
  */
 export async function listPrComments(input: {
   repo: string;

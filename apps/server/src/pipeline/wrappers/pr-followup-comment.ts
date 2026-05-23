@@ -7,7 +7,7 @@
  *   outcome.pushed=true        → markPrReady (if PR was draft);
  *                                 comment "applied per @reviewer".
  *   outcome.reason=no_diff      → no state flip; comment "no diff
- *                                 produced — try a more specific /sfb".
+ *                                 produced — try a more specific /alertforge instruction".
  *   outcome.reason=tests_failed → no state flip; comment surfacing
  *                                 the test failure tail.
  *   outcome.reason=secret_blocked → no state flip; comment surfacing
@@ -93,7 +93,7 @@ export async function runPrFollowupCommentStep(
     await opts.commentOnPrFn({
       repo: pr.repo,
       prNumber: pr.number,
-      body: `✅ sentry-fixer-bot: applied \`${instructionText.slice(0, 160)}\` per @${reviewer}. New commit pushed; re-review or send another \`/sfb\` instruction.`,
+      body: `✅ alertforge: applied \`${instructionText.slice(0, 160)}\` per @${reviewer}. New commit pushed; re-review or send another \`/alertforge\` instruction.`,
     });
     await deps.appendLog?.({
       level: "info",
@@ -114,7 +114,7 @@ export async function runPrFollowupCommentStep(
       await opts.commentOnPrFn({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🛑 sentry-fixer-bot: ran your \`/sfb\` instruction and tried ${maxAttempts} attempts to make \`${cmd}\` pass, but tests are still failing. Not pushing. Tail of stderr:\n\n\`\`\`\n${stderrTail.slice(-1500)}\n\`\`\``,
+        body: `🛑 alertforge: ran your \`/alertforge\` instruction and tried ${maxAttempts} attempts to make \`${cmd}\` pass, but tests are still failing. Not pushing. Tail of stderr:\n\n\`\`\`\n${stderrTail.slice(-1500)}\n\`\`\``,
       });
       break;
     }
@@ -123,7 +123,7 @@ export async function runPrFollowupCommentStep(
       await opts.commentOnPrFn({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🛑 sentry-fixer-bot: your \`/sfb\` instruction produced a diff that triggered ${ss?.findings.length ?? 0} secret-scan finding(s). No commit pushed — see /runs/<id> for details.`,
+        body: `🛑 alertforge: your \`/alertforge\` instruction produced a diff that triggered ${ss?.findings.length ?? 0} secret-scan finding(s). No commit pushed — see /runs/<id> for details.`,
       });
       break;
     }
@@ -133,7 +133,7 @@ export async function runPrFollowupCommentStep(
       await opts.commentOnPrFn({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🤖 sentry-fixer-bot: tried to apply \`${instructionText.slice(0, 120)}\` but the agent exited ${exitCode}. Comment again with a refined \`/sfb\` instruction or push fixes manually.`,
+        body: `🤖 alertforge: tried to apply \`${instructionText.slice(0, 120)}\` but the agent exited ${exitCode}. Comment again with a refined \`/alertforge\` instruction or push fixes manually.`,
       });
       break;
     }
@@ -141,7 +141,7 @@ export async function runPrFollowupCommentStep(
       await opts.commentOnPrFn({
         repo: pr.repo,
         prNumber: pr.number,
-        body: `🤖 sentry-fixer-bot: ran your \`/sfb\` instruction but the agent didn't produce any diff. Try a more specific instruction (e.g. \`/sfb add a null check in src/foo.ts before line 42\`).`,
+        body: `🤖 alertforge: ran your \`/alertforge\` instruction but the agent didn't produce any diff. Try a more specific instruction (e.g. \`/alertforge add a null check in src/foo.ts before line 42\`). Legacy \`/sfb\` prefix still accepted during 2.0.x.`,
       });
       break;
     }

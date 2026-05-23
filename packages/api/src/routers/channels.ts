@@ -1,6 +1,6 @@
 import { registry } from "@alertforge/core";
-import { createDb } from "@sentry-fixer-bot/db";
-import { channelConfigs, triggers } from "@sentry-fixer-bot/db/schema/triggers";
+import { createDb } from "@alertforge/db";
+import { channelConfigs, triggers } from "@alertforge/db/schema/triggers";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";

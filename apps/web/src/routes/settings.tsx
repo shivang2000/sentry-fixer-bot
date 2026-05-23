@@ -1,13 +1,13 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+} from "@alertforge/ui/components/card";
+import { Input } from "@alertforge/ui/components/input";
+import { Label } from "@alertforge/ui/components/label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Check, KeyRound, LogIn, Trash2, UserPlus, X } from "lucide-react";
@@ -63,7 +63,7 @@ const GROUPS: Array<{
       {
         key: "GITHUB_APP_PRIVATE_KEY_PATH",
         label: "Private key path",
-        placeholder: "/etc/sfb/gh-app.pem",
+        placeholder: "/etc/alertforge/gh-app.pem",
       },
     ],
   },
@@ -96,8 +96,9 @@ function SettingsPage() {
       <header>
         <h1 className="font-semibold text-xl">Settings</h1>
         <p className="text-sm text-zinc-500">
-          Pasted values are written to /etc/sfb/env (or apps/server/.env.local in dev) and picked up
-          by the next subprocess spawn.
+          Pasted values are written to /etc/alertforge/env (with legacy /etc/sfb/env symlinked for
+          back-compat during 2.0.x), or apps/server/.env.local in dev, and picked up by the next
+          subprocess spawn.
         </p>
       </header>
 
@@ -198,7 +199,7 @@ function CloudLogins() {
         </CardTitle>
         <CardDescription>
           Sign in to Claude or GitHub through the bot. Credentials persist in the container under
-          /home/sfb-runner so subsequent runs reuse them.
+          /home/alertforge-runner so subsequent runs reuse them.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

@@ -13,10 +13,10 @@
  */
 
 import { registry } from "@alertforge/core";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts, prs, runs } from "@sentry-fixer-bot/db/schema/domain";
-import { channelConfigs, triggers } from "@sentry-fixer-bot/db/schema/triggers";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { alerts, prs, runs } from "@alertforge/db/schema/domain";
+import { channelConfigs, triggers } from "@alertforge/db/schema/triggers";
 import {
   type DailyDigestDb,
   type DigestAlertRow,
@@ -25,7 +25,7 @@ import {
   type DigestRunRow,
   sendDailyDigests,
   type TriggerForDigest,
-} from "@sentry-fixer-bot/step-daily-digest";
+} from "@alertforge/step-daily-digest";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { log } from "../log";
 

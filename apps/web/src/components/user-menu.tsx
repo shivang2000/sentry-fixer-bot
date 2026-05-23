@@ -1,4 +1,4 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,8 +7,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@sentry-fixer-bot/ui/components/dropdown-menu";
-import { Skeleton } from "@sentry-fixer-bot/ui/components/skeleton";
+} from "@alertforge/ui/components/dropdown-menu";
+import { Skeleton } from "@alertforge/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";

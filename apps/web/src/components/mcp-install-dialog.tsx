@@ -1,20 +1,20 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@sentry-fixer-bot/ui/components/dialog";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+} from "@alertforge/ui/components/dialog";
+import { Input } from "@alertforge/ui/components/input";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -77,7 +77,7 @@ export function McpInstallDialog({ catalog, onOpenChange }: Props) {
     term?.writeln(`\x1b[36m▶\x1b[0m Installing \x1b[1m${catalog.name}\x1b[0m...`);
     term?.writeln(`  scope=${scope}${scope === "repo" ? ` repo=${repo}` : ""}`);
     if (envKeys.some(([_, s]) => s.secret)) {
-      term?.writeln("  writing secrets to /etc/sfb/env...");
+      term?.writeln("  writing secrets to /etc/alertforge/env...");
     }
     try {
       await install.mutateAsync({

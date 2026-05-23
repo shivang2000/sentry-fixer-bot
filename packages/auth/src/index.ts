@@ -1,7 +1,7 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import * as schema from "@sentry-fixer-bot/db/schema/auth";
-import { invites } from "@sentry-fixer-bot/db/schema/invites";
-import { env } from "@sentry-fixer-bot/env/server";
+import { createDb } from "@alertforge/db";
+import * as schema from "@alertforge/db/schema/auth";
+import { invites } from "@alertforge/db/schema/invites";
+import { env } from "@alertforge/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
@@ -68,7 +68,10 @@ export function createAuth() {
             const total = rows[0]?.count ?? 0;
 
             if (total === 0) return; // first real signup → allowed (promoted in `after`)
-            if (env.SFB_BOOTSTRAP_ADMIN_EMAIL && env.SFB_BOOTSTRAP_ADMIN_EMAIL === newUser.email) {
+            if (
+              env.ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL &&
+              env.ALERTFORGE_BOOTSTRAP_ADMIN_EMAIL === newUser.email
+            ) {
               return;
             }
             const matched = await db
@@ -121,6 +124,11 @@ export function createAuth() {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     advanced: {
+      // Cookie prefix kept as "sfb" intentionally during the 2.0.x
+      // back-compat window so existing sessions (cookies named
+      // `sfb.session_token` etc.) keep authenticating after the rename
+      // cutover. P9 will bump this to "alertforge" once the operator
+      // accepts a session-invalidation event.
       cookiePrefix: "sfb",
       defaultCookieAttributes: {
         sameSite: isHttps ? "none" : "lax",

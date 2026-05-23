@@ -1,5 +1,5 @@
 {
-  "name": "@sentry-fixer-bot/env",
+  "name": "@alertforge/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

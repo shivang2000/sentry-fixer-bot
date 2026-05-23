@@ -1,21 +1,21 @@
 "use client";
 
-import { mergeProps } from "@base-ui/react/merge-props";
-import { useRender } from "@base-ui/react/use-render";
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Separator } from "@sentry-fixer-bot/ui/components/separator";
+import { Button } from "@alertforge/ui/components/button";
+import { Input } from "@alertforge/ui/components/input";
+import { Separator } from "@alertforge/ui/components/separator";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@sentry-fixer-bot/ui/components/sheet";
-import { Skeleton } from "@sentry-fixer-bot/ui/components/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@sentry-fixer-bot/ui/components/tooltip";
-import { useIsMobile } from "@sentry-fixer-bot/ui/hooks/use-mobile";
-import { cn } from "@sentry-fixer-bot/ui/lib/utils";
+} from "@alertforge/ui/components/sheet";
+import { Skeleton } from "@alertforge/ui/components/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@alertforge/ui/components/tooltip";
+import { useIsMobile } from "@alertforge/ui/hooks/use-mobile";
+import { cn } from "@alertforge/ui/lib/utils";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";

@@ -1,5 +1,5 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@sentry-fixer-bot/ui/components/card";
+import { Button } from "@alertforge/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@alertforge/ui/components/card";
 import { Power, Trash2 } from "lucide-react";
 
 type ChannelRow = {

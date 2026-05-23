@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import { getInstallationToken } from "./app-auth";
 
 /**
@@ -18,7 +18,7 @@ export async function resolveGithubToken(): Promise<string> {
   if (env.GITHUB_APP_ID && env.GITHUB_APP_INSTALLATION_ID && env.GITHUB_APP_PRIVATE_KEY_PATH) {
     return getInstallationToken();
   }
-  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   const proc = Bun.spawn(["gh", "auth", "token"], {
     env: { ...process.env, HOME: stateHome },
     stdout: "pipe",

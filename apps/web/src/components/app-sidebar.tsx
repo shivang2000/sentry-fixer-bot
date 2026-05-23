@@ -1,4 +1,4 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,7 +7,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@sentry-fixer-bot/ui/components/dropdown-menu";
+} from "@alertforge/ui/components/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -19,8 +19,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@sentry-fixer-bot/ui/components/sidebar";
-import { Skeleton } from "@sentry-fixer-bot/ui/components/skeleton";
+} from "@alertforge/ui/components/sidebar";
+import { Skeleton } from "@alertforge/ui/components/skeleton";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
@@ -183,7 +183,7 @@ export function AppSidebar() {
             <Bot className="h-4 w-4" />
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="font-semibold text-sm">sentry-fixer-bot</span>
+            <span className="font-semibold text-sm">Alertforge</span>
             <span className="text-[10px] text-zinc-500">v2 admin</span>
           </div>
         </div>

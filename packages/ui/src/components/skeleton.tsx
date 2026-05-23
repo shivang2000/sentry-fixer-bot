@@ -1,4 +1,4 @@
-import { cn } from "@sentry-fixer-bot/ui/lib/utils";
+import { cn } from "@alertforge/ui/lib/utils";
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (

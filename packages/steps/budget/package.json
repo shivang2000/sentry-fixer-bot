@@ -12,11 +12,11 @@
   },
   "dependencies": {
     "@alertforge/core": "workspace:*",
-    "@sentry-fixer-bot/db": "workspace:*",
+    "@alertforge/db": "workspace:*",
     "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

@@ -1,15 +1,15 @@
 import { access, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { CATALOG } from "@sentry-fixer-bot/api/mcps-catalog";
-import { runCommand } from "@sentry-fixer-bot/api/run/npm-runner";
-import { createDb } from "@sentry-fixer-bot/db";
-import { mcpInstalls, skillInstalls } from "@sentry-fixer-bot/db/schema/admin";
+import { CATALOG } from "@alertforge/api/mcps-catalog";
+import { runCommand } from "@alertforge/api/run/npm-runner";
+import { createDb } from "@alertforge/db";
+import { mcpInstalls, skillInstalls } from "@alertforge/db/schema/admin";
 import { and, eq, isNull } from "drizzle-orm";
 import { log } from "./log";
 
 /** Where claude's CLI looks up `/skill-name` slash commands. */
 function claudeSkillsDir(): string {
-  const home = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const home = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   return join(home, ".claude", "skills");
 }
 
@@ -58,31 +58,39 @@ async function linkBundleSubskills(bundlePath: string): Promise<void> {
 }
 
 const DEFAULT_SKILLS_REPO =
-  process.env.SFB_DEFAULT_SKILLS_REPO ?? "https://github.com/obra/superpowers";
+  process.env.ALERTFORGE_DEFAULT_SKILLS_REPO ??
+  process.env.SFB_DEFAULT_SKILLS_REPO ??
+  "https://github.com/obra/superpowers";
 const DEFAULT_SKILLS_NAME = "superpowers-bundle";
 
 function disabled(): boolean {
-  return process.env.SFB_DISABLE_AUTO_BOOTSTRAP === "true";
+  return (
+    (process.env.ALERTFORGE_DISABLE_AUTO_BOOTSTRAP ?? process.env.SFB_DISABLE_AUTO_BOOTSTRAP) ===
+    "true"
+  );
 }
 
 function skillsRoot(): string {
-  if (process.env.SFB_SKILLS_DIR) return process.env.SFB_SKILLS_DIR;
-  if (process.env.SFB_STATE_DIR) return `${process.env.SFB_STATE_DIR}/skills`;
-  return "/var/lib/sfb/skills";
+  const explicit = process.env.ALERTFORGE_SKILLS_DIR ?? process.env.SFB_SKILLS_DIR;
+  if (explicit) return explicit;
+  const state = process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR;
+  if (state) return `${state}/skills`;
+  return "/var/lib/alertforge/skills";
 }
 
 /**
  * Seed canonical MCP installs (sentry + github) and a canonical skills
  * bundle (superpowers) on a fresh install. Idempotent — checked by
  * catalog id / source ref so re-runs do nothing. Logs one line per
- * insert. Honours SFB_DISABLE_AUTO_BOOTSTRAP=true for CI / tests.
+ * insert. Honours ALERTFORGE_DISABLE_AUTO_BOOTSTRAP=true (or legacy
+ * SFB_DISABLE_AUTO_BOOTSTRAP=true) for CI / tests.
  *
  * Failure of the skills clone is non-fatal: we log the error and keep
  * the server booting. An operator can retry from `/skills`.
  */
 export async function bootstrapDefaults(): Promise<void> {
   if (disabled()) {
-    log.info("[bootstrap] skipped (SFB_DISABLE_AUTO_BOOTSTRAP=true)");
+    log.info("[bootstrap] skipped (ALERTFORGE_DISABLE_AUTO_BOOTSTRAP=true)");
     return;
   }
   const db = createDb();

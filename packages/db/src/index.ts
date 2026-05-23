@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 

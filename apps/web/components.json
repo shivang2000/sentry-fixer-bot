@@ -13,8 +13,8 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@/components",
-    "utils": "@sentry-fixer-bot/ui/lib/utils",
-    "ui": "@sentry-fixer-bot/ui/components",
+    "utils": "@alertforge/ui/lib/utils",
+    "ui": "@alertforge/ui/components",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },

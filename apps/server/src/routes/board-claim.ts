@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { auth as betterAuth } from "@sentry-fixer-bot/auth";
-import { validateClaimRequest } from "@sentry-fixer-bot/auth/claim-logic";
-import { createDb } from "@sentry-fixer-bot/db";
-import { user as userTable } from "@sentry-fixer-bot/db/schema/auth";
-import { boardClaimTokens } from "@sentry-fixer-bot/db/schema/invites";
-import { env } from "@sentry-fixer-bot/env/server";
+import { auth as betterAuth } from "@alertforge/auth";
+import { validateClaimRequest } from "@alertforge/auth/claim-logic";
+import { createDb } from "@alertforge/db";
+import { user as userTable } from "@alertforge/db/schema/auth";
+import { boardClaimTokens } from "@alertforge/db/schema/invites";
+import { env } from "@alertforge/env/server";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 

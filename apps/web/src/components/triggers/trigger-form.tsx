@@ -1,13 +1,13 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-import { Input } from "@sentry-fixer-bot/ui/components/input";
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { Button } from "@alertforge/ui/components/button";
+import { Input } from "@alertforge/ui/components/input";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -246,7 +246,7 @@ export function TriggerForm({ mode, initial, initialSource, onSuccess, onCancel 
             onChange={(v) => setModels({ ...models, followUp: v })}
             disabled={busy || !isCustom}
             helperText={
-              isCustom ? "Used when follow-up /sfb loop toggle is on" : "Disabled by preset"
+              isCustom ? "Used when follow-up /alertforge loop toggle is on" : "Disabled by preset"
             }
           />
         </div>

@@ -1,8 +1,8 @@
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { alerts } from "@alertforge/db/schema/domain";
 import { extractStackTrace, getLatestEvent, postIssueComment } from "@alertforge/source-sentry";
 import { classify } from "@alertforge/step-classify";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts } from "@sentry-fixer-bot/db/schema/domain";
 import { eq } from "drizzle-orm";
 import { log } from "../log";
 import { publishJob } from "../queue/boss";
@@ -142,7 +142,7 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     });
     await postIssueComment(
       alert.sentryIssueId,
-      `sentry-fixer-bot: project "${alert.sentryProject}" is not in repos_config — add it to enable agent fixes.`,
+      `alertforge: project "${alert.sentryProject}" is not in repos_config — add it to enable agent fixes.`,
     );
     await updateRun(runId, { status: "no_repo_match", endedAt: new Date() });
     return;
@@ -158,7 +158,7 @@ export async function processTriageJob(payload: TriageJob): Promise<void> {
     });
     await postIssueComment(
       alert.sentryIssueId,
-      `sentry-fixer-bot: triaged as ${triage?.severity}. Below configured min severity (${cfg.minSeverityToFix}); not attempting a fix.`,
+      `alertforge: triaged as ${triage?.severity}. Below configured min severity (${cfg.minSeverityToFix}); not attempting a fix.`,
     );
     await updateRun(runId, { status: "triaged_only", endedAt: new Date() });
     return;

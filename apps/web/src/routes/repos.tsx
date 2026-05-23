@@ -1,11 +1,6 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-import { Checkbox } from "@sentry-fixer-bot/ui/components/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@sentry-fixer-bot/ui/components/dialog";
+import { Button } from "@alertforge/ui/components/button";
+import { Checkbox } from "@alertforge/ui/components/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@alertforge/ui/components/dialog";
 import {
   Table,
   TableBody,
@@ -13,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@sentry-fixer-bot/ui/components/table";
+} from "@alertforge/ui/components/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { GitBranchPlus, Pencil, Plus, Trash2 } from "lucide-react";

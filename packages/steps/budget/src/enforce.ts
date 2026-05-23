@@ -1,6 +1,6 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { budgets } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { budgets } from "@alertforge/db/schema/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { type BudgetCheck, decideBudget } from "./decide";
 

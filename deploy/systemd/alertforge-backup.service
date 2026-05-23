@@ -1,0 +1,8 @@
+[Unit]
+Description=alertforge daily postgres backup to S3
+
+[Service]
+Type=oneshot
+User=alertforge-runner
+EnvironmentFile=/etc/alertforge/env
+ExecStart=/opt/alertforge/current/scripts/backup-db.sh

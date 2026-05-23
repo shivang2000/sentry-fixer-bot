@@ -1,5 +1,5 @@
+import { cn } from "@alertforge/ui/lib/utils";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
-import { cn } from "@sentry-fixer-bot/ui/lib/utils";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import type * as React from "react";
 

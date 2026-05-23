@@ -1,7 +1,7 @@
 /**
  * Test-only env preload. Imported as the FIRST statement in
  * `run-pipeline.integration.test.ts` so the env-validation in
- * `@sentry-fixer-bot/env/server` (which is pulled in transitively
+ * `@alertforge/env/server` (which is pulled in transitively
  * via @alertforge/step-fix-agent/spawn.ts) sees a valid set of vars
  * even when `bun test` is run from the repo root (where the
  * apps/server/.env file isn't auto-loaded by dotenv).

@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
 
 type SpawnedProc = {
   stdout?: ReadableStream<Uint8Array>;
@@ -27,7 +27,7 @@ const Bun = (globalThis as unknown as { Bun: BunG }).Bun;
 async function ghSearchRepo(
   slug: string,
 ): Promise<{ nameWithOwner: string; defaultBranch: string } | null> {
-  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   // `gh search repos` JSON exposes `fullName` (owner/repo) — not the
   // `nameWithOwner` field that `gh repo list` uses. Same data, just
   // a different key. Defensive: also accept nameWithOwner if a future

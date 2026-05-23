@@ -1,11 +1,11 @@
-import { Label } from "@sentry-fixer-bot/ui/components/label";
+import { Label } from "@alertforge/ui/components/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@sentry-fixer-bot/ui/components/select";
+} from "@alertforge/ui/components/select";
 import { useId } from "react";
 
 // V1 set of Anthropic models the agent supports. Order = surface order

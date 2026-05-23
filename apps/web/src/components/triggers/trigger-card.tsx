@@ -1,11 +1,11 @@
-import { Button } from "@sentry-fixer-bot/ui/components/button";
+import { Button } from "@alertforge/ui/components/button";
 import {
   Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
+} from "@alertforge/ui/components/card";
 import { Link } from "@tanstack/react-router";
 import { Pencil, Power, Trash2 } from "lucide-react";
 

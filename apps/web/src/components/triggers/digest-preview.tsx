@@ -4,7 +4,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@sentry-fixer-bot/ui/components/card";
+} from "@alertforge/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3 } from "lucide-react";
 

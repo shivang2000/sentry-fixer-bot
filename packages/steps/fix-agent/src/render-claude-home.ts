@@ -1,7 +1,7 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createDb } from "@sentry-fixer-bot/db";
-import { mcpInstalls, skillInstalls } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { mcpInstalls, skillInstalls } from "@alertforge/db/schema/admin";
 import { and, eq, or } from "drizzle-orm";
 
 export type RenderResult = { home: string; mcpConfigPath: string };

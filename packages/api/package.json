@@ -1,5 +1,5 @@
 {
-  "name": "@sentry-fixer-bot/api",
+  "name": "@alertforge/api",
   "type": "module",
   "exports": {
     ".": {
@@ -12,10 +12,10 @@
   "scripts": {},
   "dependencies": {
     "@alertforge/core": "workspace:*",
-    "@sentry-fixer-bot/auth": "workspace:*",
-    "@sentry-fixer-bot/db": "workspace:*",
-    "@sentry-fixer-bot/env": "workspace:*",
-    "@sentry-fixer-bot/step-daily-digest": "workspace:*",
+    "@alertforge/auth": "workspace:*",
+    "@alertforge/db": "workspace:*",
+    "@alertforge/env": "workspace:*",
+    "@alertforge/step-daily-digest": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "adm-zip": "^0.5.17",
@@ -25,7 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/adm-zip": "^0.5.8",
     "@types/bun": "catalog:",
     "hono": "catalog:",

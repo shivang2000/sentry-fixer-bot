@@ -16,7 +16,7 @@
  * exist to make every scenario below go green.
  */
 
-// Stub the env validation BEFORE anything imports @sentry-fixer-bot/env.
+// Stub the env validation BEFORE anything imports @alertforge/env.
 // The fix-agent wrapper transitively pulls env/server at module load; this
 // preload ensures the validation passes when `bun test` runs from the repo
 // root (where apps/server/.env isn't auto-loaded by dotenv).

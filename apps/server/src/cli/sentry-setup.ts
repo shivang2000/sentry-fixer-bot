@@ -10,7 +10,7 @@
  * an `exit code 0` and triggers a setup.status refetch.
  */
 
-import { setEnvSecret } from "@sentry-fixer-bot/api/secrets/env-file";
+import { setEnvSecret } from "@alertforge/api/secrets/env-file";
 
 function write(s: string): void {
   process.stdout.write(s);
@@ -93,6 +93,8 @@ write("\x1b[32m✓ Credentials accepted by Sentry.\x1b[0m\r\n");
 
 await setEnvSecret("SENTRY_API_TOKEN", token);
 await setEnvSecret("SENTRY_ORG_SLUG", org);
-write("\x1b[32m✓ Wrote SENTRY_API_TOKEN + SENTRY_ORG_SLUG to /sfb/state/etc/env.\x1b[0m\r\n");
+write(
+  "\x1b[32m✓ Wrote SENTRY_API_TOKEN + SENTRY_ORG_SLUG to /alertforge/state/etc/env.\x1b[0m\r\n",
+);
 write("\r\nReturning to the wizard. The Sentry step should flip green within seconds.\r\n");
 process.exit(0);

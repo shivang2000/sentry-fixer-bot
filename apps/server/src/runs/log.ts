@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { runLogs } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { runLogs } from "@alertforge/db/schema/domain";
 import { eq, sql } from "drizzle-orm";
 
 // Per-process sequence counter keyed by run id. On first use for a

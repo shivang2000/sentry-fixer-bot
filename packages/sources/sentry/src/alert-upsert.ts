@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { alerts } from "@sentry-fixer-bot/db/schema/domain";
+import { createDb } from "@alertforge/db";
+import { alerts } from "@alertforge/db/schema/domain";
 import { eq, sql } from "drizzle-orm";
 
 export type AlertInsert = typeof alerts.$inferInsert;

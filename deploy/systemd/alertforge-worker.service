@@ -1,0 +1,22 @@
+[Unit]
+Description=alertforge job worker (triage + agent)
+After=network.target docker.service alertforge-server.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=alertforge-runner
+WorkingDirectory=/opt/alertforge/current
+EnvironmentFile=/etc/alertforge/env
+ExecStart=/usr/local/bin/bun apps/server/src/worker/index.ts
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/alertforge
+
+[Install]
+WantedBy=multi-user.target

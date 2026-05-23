@@ -1,0 +1,23 @@
+[Unit]
+Description=alertforge HTTP server
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=alertforge-runner
+WorkingDirectory=/opt/alertforge/current
+EnvironmentFile=/etc/alertforge/env
+ExecStart=/usr/local/bin/bun apps/server/src/index.ts
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/alertforge
+
+[Install]
+WantedBy=multi-user.target

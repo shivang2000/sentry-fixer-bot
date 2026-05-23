@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/web";
+import { env } from "@alertforge/env/web";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({

@@ -1,6 +1,6 @@
 import { registry } from "@alertforge/core";
+import { env } from "@alertforge/env/server";
 import { upsertAlert } from "@alertforge/source-sentry";
-import { env } from "@sentry-fixer-bot/env/server";
 import { Hono } from "hono";
 import { archiveJson } from "../archive/s3";
 import { publishJob } from "../queue/boss";

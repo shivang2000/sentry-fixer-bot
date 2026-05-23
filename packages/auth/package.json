@@ -1,5 +1,5 @@
 {
-  "name": "@sentry-fixer-bot/auth",
+  "name": "@alertforge/auth",
   "type": "module",
   "exports": {
     ".": {
@@ -11,15 +11,15 @@
   },
   "scripts": {},
   "dependencies": {
-    "@sentry-fixer-bot/db": "workspace:*",
-    "@sentry-fixer-bot/env": "workspace:*",
+    "@alertforge/db": "workspace:*",
+    "@alertforge/env": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "typescript": "catalog:"
   }
 }

@@ -1,21 +1,26 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import { isValidEnvKey, shellQuote } from "./shell-quote";
 
-const PROD_FILE = "/etc/sfb/env";
+const PROD_FILE = "/etc/alertforge/env";
 const DEV_FILE = "apps/server/.env.local";
 
 function targetFile(): string {
-  if (process.env.SFB_RUN_MODE === "container") {
-    return process.env.SFB_ENV_FILE ?? "/sfb/state/etc/env";
+  if ((process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) === "container") {
+    return (
+      process.env.ALERTFORGE_ENV_FILE ?? process.env.SFB_ENV_FILE ?? "/alertforge/state/etc/env"
+    );
   }
   return env.NODE_ENV === "production" ? PROD_FILE : DEV_FILE;
 }
 
 function shouldReloadSystemd(): boolean {
-  return env.NODE_ENV === "production" && process.env.SFB_RUN_MODE !== "container";
+  return (
+    env.NODE_ENV === "production" &&
+    (process.env.ALERTFORGE_RUN_MODE ?? process.env.SFB_RUN_MODE) !== "container"
+  );
 }
 
 export async function setEnvSecret(key: string, value: string): Promise<void> {
@@ -44,7 +49,9 @@ export function hasEnvSecret(key: string): boolean {
 
 function reloadService(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const p = spawn("systemctl", ["reload-or-restart", "sfb-server.service"], { stdio: "pipe" });
+    const p = spawn("systemctl", ["reload-or-restart", "alertforge-server.service"], {
+      stdio: "pipe",
+    });
     let stderr = "";
     p.stderr.on("data", (b: Buffer) => {
       stderr += b.toString();

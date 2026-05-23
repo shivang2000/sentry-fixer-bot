@@ -11,7 +11,7 @@
     "rootDirs": ["."],
     "paths": {
       "@/*": ["./src/*"],
-      "@sentry-fixer-bot/ui/*": ["../../packages/ui/src/*"]
+      "@alertforge/ui/*": ["../../packages/ui/src/*"]
     }
   }
 }

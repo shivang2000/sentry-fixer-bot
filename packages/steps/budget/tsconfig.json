@@ -1,4 +1,4 @@
 {
-  "extends": "@sentry-fixer-bot/config/tsconfig.base.json",
+  "extends": "@alertforge/config/tsconfig.base.json",
   "include": ["src/**/*.ts"]
 }

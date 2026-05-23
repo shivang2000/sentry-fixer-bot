@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@alertforge/core": "workspace:*",
-    "@sentry-fixer-bot/env": "workspace:*"
+    "@alertforge/env": "workspace:*"
   },
   "devDependencies": {
-    "@sentry-fixer-bot/config": "workspace:*",
+    "@alertforge/config": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

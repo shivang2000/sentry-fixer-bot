@@ -1,8 +1,8 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDb } from "@sentry-fixer-bot/db";
-import { skillInstalls } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { skillInstalls } from "@alertforge/db/schema/admin";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -12,9 +12,11 @@ import { SKILLS_CATALOG } from "../skills-catalog";
 import { safeExtractZip, validateZipBuffer } from "../skills-zip";
 
 function defaultSkillsDir(): string {
-  if (process.env.SFB_SKILLS_DIR) return process.env.SFB_SKILLS_DIR;
-  if (process.env.SFB_STATE_DIR) return `${process.env.SFB_STATE_DIR}/skills`;
-  return "/var/lib/sfb/skills";
+  const explicit = process.env.ALERTFORGE_SKILLS_DIR ?? process.env.SFB_SKILLS_DIR;
+  if (explicit) return explicit;
+  const state = process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR;
+  if (state) return `${state}/skills`;
+  return "/var/lib/alertforge/skills";
 }
 
 const SKILLS_DIR = defaultSkillsDir();

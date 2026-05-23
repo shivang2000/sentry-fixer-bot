@@ -1,5 +1,5 @@
-import { createDb } from "@sentry-fixer-bot/db";
-import { chatMessages, chatSessions } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { chatMessages, chatSessions } from "@alertforge/db/schema/admin";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, router } from "../index";
@@ -76,7 +76,7 @@ export const chatRouter = router({
       // Best-effort scrub of the per-session work dir on the state volume.
       // We do this after the DB delete so a partial fs failure doesn't leave
       // a row pointing at a gone path.
-      const base = process.env.WORK_DIR ?? "/var/lib/sfb/work";
+      const base = process.env.WORK_DIR ?? "/var/lib/alertforge/work";
       try {
         const { rm } = await import("node:fs/promises");
         const { join } = await import("node:path");

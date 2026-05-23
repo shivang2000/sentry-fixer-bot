@@ -191,7 +191,7 @@ async function loadListChannelsReal(deps: StepDeps): Promise<ListChannelConfigsF
         }
       | undefined;
     if (!db) return [];
-    const { channelConfigs } = await import("@sentry-fixer-bot/db/schema/triggers");
+    const { channelConfigs } = await import("@alertforge/db/schema/triggers");
     const { eq, and } = await import("drizzle-orm");
     const rows = (await db
       .select()

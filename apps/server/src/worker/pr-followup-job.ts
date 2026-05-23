@@ -4,9 +4,9 @@
  *
  * Worker boundary concerns kept here (NOT in steps):
  *   - Idempotency watermark check + advance (lastReviewedCommentAt).
- *     The same /sfb comment can arrive via webhook AND cron within
- *     the same minute; watermark advances in the `finally` so even on
- *     failure the comment isn't re-tried.
+ *     The same /alertforge (or legacy /sfb) comment can arrive via
+ *     webhook AND cron within the same minute; watermark advances in
+ *     the `finally` so even on failure the comment isn't re-tried.
  *   - humanReviewState UI flip (`in_progress` before pipeline, then
  *     `none` or `waiting_human` after based on outcome).
  *   - The mcpConfigPath render (renderClaudeHome reads installed MCPs
@@ -19,11 +19,11 @@
  */
 
 import { type CtxStore, DiskCtxStore, runPipeline } from "@alertforge/core";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { alerts, prs, runs } from "@alertforge/db/schema/domain";
+import { env } from "@alertforge/env/server";
 import { renderClaudeHome } from "@alertforge/step-fix-agent";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts, prs, runs } from "@sentry-fixer-bot/db/schema/domain";
-import { env } from "@sentry-fixer-bot/env/server";
 import { eq } from "drizzle-orm";
 import { log } from "../log";
 import { archiveCtxToS3, cleanupCtxDir } from "../pipeline/ctx-archive";
@@ -38,7 +38,8 @@ import { appendRunLog } from "../runs/log";
 const MAX_FOLLOWUP_ATTEMPTS = 3;
 
 /**
- * Process a `/sfb <instruction>` comment on a PR the bot opened.
+ * Process a `/alertforge <instruction>` (or legacy `/sfb`) comment on
+ * a PR the bot opened.
  *
  * Worker structure (P3c.3 flip):
  *   1. Load PR row. Bail on missing.
@@ -62,8 +63,9 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
   }
 
   // Idempotency guard — STAYS in the worker (not in a step).
-  // Same /sfb comment can arrive via webhook AND cron within the same
-  // minute; only one should run. Skip before any expensive ops.
+  // Same /alertforge (or legacy /sfb) comment can arrive via webhook
+  // AND cron within the same minute; only one should run. Skip before
+  // any expensive ops.
   if (pr.lastReviewedCommentAt && new Date(job.commentCreatedAt) <= pr.lastReviewedCommentAt) {
     log.info({ prId: job.prId, commentId: job.commentId }, "[pr-followup] older than watermark");
     await appendRunLog({
@@ -79,7 +81,7 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     runId: pr.runId,
     level: "info",
     source: "pr-followup",
-    message: `Picked up /sfb comment from @${job.commentAuthor} on PR #${pr.number}: ${job.commentBody.slice(0, 200)}`,
+    message: `Picked up /alertforge comment from @${job.commentAuthor} on PR #${pr.number}: ${job.commentBody.slice(0, 200)}`,
   });
 
   // Load alert title (for the followup prompt) + repos_config (for
@@ -134,7 +136,14 @@ export async function processPrFollowupJob(job: PrFollowupJob): Promise<void> {
     });
   }
 
-  const branch = `sfb/${pr.runId}`;
+  // Re-attach to whatever branch the original run recorded — preserves
+  // back-compat with legacy `sfb/<runId>` branches opened before P7.
+  // Falls back to the new `alertforge/<runId>` shape if the runs row
+  // somehow has no branch column populated (legacy schema).
+  const runRow = (
+    await db.select({ branch: runs.branch }).from(runs).where(eq(runs.id, pr.runId)).limit(1)
+  )[0];
+  const branch = runRow?.branch ?? `alertforge/${pr.runId}`;
   await ctx.write("pr", {
     repo: pr.repo,
     number: pr.number,
@@ -292,7 +301,7 @@ async function deriveOutcomeState(
 
   // No diff but no other failure — claude didn't produce changes for
   // this instruction. Legacy parity: waiting_human (operator must
-  // refine the /sfb).
+  // refine the /alertforge instruction).
   return "waiting_human";
 }
 

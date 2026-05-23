@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { createDb } from "@sentry-fixer-bot/db";
-import { chatMessages, chatSessions } from "@sentry-fixer-bot/db/schema/admin";
+import { createDb } from "@alertforge/db";
+import { chatMessages, chatSessions } from "@alertforge/db/schema/admin";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
@@ -13,12 +13,16 @@ const { upgradeWebSocket, websocket } = createBunWebSocket();
 export const chatWs = new Hono();
 
 // Chat sessions all share a single persistent dev folder on the state
-// volume. Operators clone repos into /sfb/state/dev, run things across
+// volume. Operators clone repos into /alertforge/state/dev, run things across
 // sessions, and the work survives session.end / container restart. Per-
 // session isolation belongs to agent runs (which still use WORK_DIR =
-// /sfb/state/work/<runId>) — chat is for humans, not the bot.
+// /alertforge/state/work/<runId>) — chat is for humans, not the bot.
 function workDirFor(_sessionId: string): string {
-  return process.env.SFB_CHAT_DIR ?? `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/dev`;
+  return (
+    process.env.ALERTFORGE_CHAT_DIR ??
+    process.env.SFB_CHAT_DIR ??
+    `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/dev`
+  );
 }
 
 type ClientMsg =
@@ -180,8 +184,9 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
   // (.claude/, .config/gh/, .sentry/, .sentryclirc) persist across
   // container recreations. bun's inherited process.env.HOME is /root
   // (runuser populates HOME from /etc/passwd in container mode), so we
-  // can't fall back to it — always compute from SFB_STATE_DIR.
-  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  // can't fall back to it — always compute from ALERTFORGE_STATE_DIR
+  // (with legacy SFB_STATE_DIR honoured for one release).
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
 
   if (provider === "claude") {
     // `claude auth login` is the CLI's documented user-facing OAuth

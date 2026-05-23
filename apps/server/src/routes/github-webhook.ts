@@ -1,8 +1,8 @@
 import { verifyHmacSha256 } from "@alertforge/core";
-import { createDb } from "@sentry-fixer-bot/db";
-import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { prs } from "@sentry-fixer-bot/db/schema/domain";
-import { env } from "@sentry-fixer-bot/env/server";
+import { createDb } from "@alertforge/db";
+import { reposConfig } from "@alertforge/db/schema/admin";
+import { prs } from "@alertforge/db/schema/domain";
+import { env } from "@alertforge/env/server";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { getPrState } from "../github/pr-ops";
@@ -16,12 +16,24 @@ export const githubWebhook = new Hono();
  * Magic prefix the bot listens for. Anything else from human reviewers
  * is treated as ordinary conversation and ignored — same pattern as
  * Dependabot/Renovate (`@dependabot rebase`).
+ *
+ * `/alertforge` is the canonical post-rename prefix. `/sfb` is kept as
+ * an alias during the 2.0.x back-compat window so existing reviewer
+ * muscle-memory keeps working. Removed in alertforge-2.1.0 (P9).
  */
+export const ALERTFORGE_COMMAND_PREFIX = "/alertforge";
 export const SFB_COMMAND_PREFIX = "/sfb";
+const COMMAND_PREFIX_RE = /^\/(sfb|alertforge)\b/i;
 
-export function isSfbCommand(body: string): boolean {
-  return body.trim().toLowerCase().startsWith(SFB_COMMAND_PREFIX);
+export function isAlertforgeCommand(body: string): boolean {
+  return COMMAND_PREFIX_RE.test(body.trim());
 }
+
+/**
+ * Back-compat alias. Removed in alertforge-2.1.0 (P9). New callers use
+ * `isAlertforgeCommand`.
+ */
+export const isSfbCommand = isAlertforgeCommand;
 
 type IssueCommentEvent = {
   action: "created" | "edited" | "deleted";
@@ -49,10 +61,10 @@ type IssueCommentEvent = {
  * Flow:
  *   1. Verify X-Hub-Signature-256 against GITHUB_WEBHOOK_SECRET.
  *   2. Filter to `action === "created"` on a PR comment.
- *   3. Require `/sfb` prefix on body.
+ *   3. Require `/alertforge` (or legacy `/sfb`) prefix on body.
  *   4. Require sender to be in `reposConfig.prReviewers` for the repo.
  *   5. Look up the prs row by (repo, number); require it to exist
- *      (i.e. PR was opened by sfb) and be in `waiting_human` state.
+ *      (i.e. PR was opened by alertforge) and be in `waiting_human` state.
  *   6. Enqueue a JOB_PR_FOLLOWUP with the comment payload.
  *
  * Every rejection path returns 202 (not 4xx) so GitHub doesn't retry
@@ -90,8 +102,8 @@ githubWebhook.post("/webhooks/github", async (c) => {
   if (!payload.issue.pull_request) {
     return c.json({ ignored: "not_a_pr_comment" }, 202);
   }
-  if (!isSfbCommand(payload.comment.body)) {
-    return c.json({ ignored: "no_sfb_prefix" }, 202);
+  if (!isAlertforgeCommand(payload.comment.body)) {
+    return c.json({ ignored: "no_command_prefix" }, 202);
   }
 
   const enqueued = await dispatchPrComment({
@@ -122,7 +134,7 @@ export async function dispatchPrComment(input: {
     createdAt: string;
   };
 }): Promise<{ ignored?: string; queued?: true; prId?: string }> {
-  if (!isSfbCommand(input.comment.body)) return { ignored: "no_sfb_prefix" };
+  if (!isAlertforgeCommand(input.comment.body)) return { ignored: "no_command_prefix" };
 
   const db = createDb();
   const cfgRows = await db
@@ -133,11 +145,11 @@ export async function dispatchPrComment(input: {
   const cfg = cfgRows[0];
   if (!cfg) return { ignored: "no_repo_config" };
 
-  // Empty allow-list = "no allow-list" → anyone can drive /sfb. This
-  // is the right default for solo operators who don't want to maintain
-  // a list. As soon as the operator adds even one entry to
+  // Empty allow-list = "no allow-list" → anyone can drive /alertforge.
+  // This is the right default for solo operators who don't want to
+  // maintain a list. As soon as the operator adds even one entry to
   // reposConfig.prReviewers, the gate becomes strict: only listed
-  // GitHub usernames can issue /sfb commands.
+  // GitHub usernames can issue /alertforge (or legacy /sfb) commands.
   if (cfg.prReviewers.length > 0 && !cfg.prReviewers.includes(input.comment.author)) {
     log.info(
       { repo: input.repo, author: input.comment.author },
@@ -153,7 +165,7 @@ export async function dispatchPrComment(input: {
       .where(and(eq(prs.repo, input.repo), eq(prs.number, input.prNumber)))
       .limit(1)
   )[0];
-  if (!prRow) return { ignored: "pr_not_opened_by_sfb" };
+  if (!prRow) return { ignored: "pr_not_opened_by_alertforge" };
 
   // Idempotency: skip comments older than (or equal to) the watermark.
   if (

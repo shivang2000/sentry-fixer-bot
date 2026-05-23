@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/web";
+import { env } from "@alertforge/env/web";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 

@@ -22,10 +22,10 @@ const BunRuntime = (globalThis as unknown as { Bun: BunGlobal }).Bun;
 async function claude(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const stateHome = `${process.env.SFB_STATE_DIR ?? "/sfb/state"}/home`;
+  const stateHome = `${process.env.ALERTFORGE_STATE_DIR ?? process.env.SFB_STATE_DIR ?? "/alertforge/state"}/home`;
   // Force HOME to the state volume — bun's process.env.HOME is /root
   // in container mode (runuser sets it from /etc/passwd). The login
-  // flow pins HOME=/sfb/state/home explicitly when writing creds; the
+  // flow pins HOME=/alertforge/state/home explicitly when writing creds; the
   // status reader has to use the same path to find them.
   const proc = BunRuntime.spawn(["claude", ...args], {
     cwd: stateHome,

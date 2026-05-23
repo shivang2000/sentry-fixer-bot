@@ -1,4 +1,4 @@
-import { env } from "@sentry-fixer-bot/env/server";
+import { env } from "@alertforge/env/server";
 import { PgBoss } from "pg-boss";
 import {
   JOB_AGENT,

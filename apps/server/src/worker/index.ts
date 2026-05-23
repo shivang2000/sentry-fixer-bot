@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   // PR comment poll runs every 5m as a fallback for when the GitHub
   // webhook is not configured (no GITHUB_WEBHOOK_SECRET) or webhook
   // delivery dropped a payload. Five minutes is the worst-case
-  // reviewer wait time before a `/sfb` lands; idempotent via
+  // reviewer wait time before a `/alertforge` (or legacy `/sfb`) lands; idempotent via
   // lastReviewedCommentAt so duplicate webhook+cron deliveries are
   // safe.
   await ensureDefaultSchedule(JOB_PR_COMMENT_POLL, "*/5 * * * *");

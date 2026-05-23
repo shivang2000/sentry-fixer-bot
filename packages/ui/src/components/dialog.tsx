@@ -1,9 +1,8 @@
 "use client";
 
+import { Button } from "@alertforge/ui/components/button";
+import { cn } from "@alertforge/ui/lib/utils";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { Button } from "@sentry-fixer-bot/ui/components/button";
-
-import { cn } from "@sentry-fixer-bot/ui/lib/utils";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 
