@@ -16,7 +16,9 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AddChannelDialog } from "@/components/triggers/add-channel-dialog";
 import { ChannelCard } from "@/components/triggers/channel-card";
+import { DigestPreview } from "@/components/triggers/digest-preview";
 import { ManualUrlTrigger } from "@/components/triggers/manual-url-trigger";
+import { OutcomeChart } from "@/components/triggers/outcome-chart";
 import type { PresetValue } from "@/components/triggers/preset-selector";
 import { TriggerForm } from "@/components/triggers/trigger-form";
 import { trpc } from "@/utils/trpc";
@@ -283,7 +285,22 @@ function AuditTab({ triggerId }: { triggerId: string }) {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Outcome trend</CardTitle>
+          <CardDescription>
+            Stacked daily outcomes for the last 30 days. Populated by the daily outcome-poll cron at
+            02:00 UTC.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OutcomeChart triggerId={triggerId} />
+        </CardContent>
+      </Card>
+
+      <DigestPreview triggerId={triggerId} />
+
       <div className="flex items-center justify-between">
         <h2 className="font-medium text-sm">Recent runs</h2>
         <Link to="/runs">

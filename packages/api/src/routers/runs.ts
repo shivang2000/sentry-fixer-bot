@@ -280,4 +280,74 @@ export const runsRouter = router({
           }>)
         : [];
     }),
+
+  /**
+   * P8 — daily outcome roll-up per trigger for the OutcomeChart UI
+   * component. Returns one row per day with the four outcome counts so
+   * the chart can stack-bar them. Days with zero activity are emitted
+   * as zero rows so the chart length is consistent.
+   *
+   * Joins prs → runs to filter by trigger_id; groups by date of
+   * `outcome_recorded_at` (NULL outcomes are excluded — they're still
+   * in flight). When the trigger has no recorded outcomes yet the
+   * function returns []; the component renders the empty state.
+   */
+  outcomeChart: adminProcedure
+    .input(
+      z.object({
+        triggerId: z.string().uuid(),
+        days: z.number().int().min(1).max(180).default(30),
+      }),
+    )
+    .query(async ({ input }) => {
+      const db = createDb();
+      const result = await db.execute<{
+        bucket: string;
+        merged_clean: number;
+        merged_with_edits: number;
+        closed_unmerged: number;
+        stale_open: number;
+      }>(sql`
+        with days as (
+          select generate_series(
+            (current_date - (${input.days - 1})::int)::date,
+            current_date,
+            '1 day'::interval
+          )::date as bucket
+        ),
+        outcomes as (
+          select
+            ${prs.outcomeRecordedAt}::date as bucket,
+            count(*) filter (where ${prs.outcome} = 'merged_clean')::int as merged_clean,
+            count(*) filter (where ${prs.outcome} = 'merged_with_edits')::int as merged_with_edits,
+            count(*) filter (where ${prs.outcome} = 'closed_unmerged')::int as closed_unmerged,
+            count(*) filter (where ${prs.outcome} = 'stale_open')::int as stale_open
+          from ${prs}
+          inner join ${runs} on ${runs.id} = ${prs.runId}
+          where ${runs.triggerId} = ${input.triggerId}
+            and ${prs.outcomeRecordedAt} is not null
+            and ${prs.outcomeRecordedAt} >= current_date - (${input.days - 1})::int
+          group by 1
+        )
+        select
+          to_char(d.bucket, 'YYYY-MM-DD') as bucket,
+          coalesce(o.merged_clean, 0)::int as merged_clean,
+          coalesce(o.merged_with_edits, 0)::int as merged_with_edits,
+          coalesce(o.closed_unmerged, 0)::int as closed_unmerged,
+          coalesce(o.stale_open, 0)::int as stale_open
+        from days d
+        left join outcomes o on o.bucket = d.bucket
+        order by d.bucket asc
+      `);
+      const rows = (result as { rows?: unknown }).rows ?? result;
+      return Array.isArray(rows)
+        ? (rows as Array<{
+            bucket: string;
+            merged_clean: number;
+            merged_with_edits: number;
+            closed_unmerged: number;
+            stale_open: number;
+          }>)
+        : [];
+    }),
 });

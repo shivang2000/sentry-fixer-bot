@@ -23,6 +23,8 @@
     "@alertforge/step-secret-scan": "workspace:*",
     "@alertforge/step-test-gate": "workspace:*",
     "@alertforge/step-workspace": "workspace:*",
+    "@sentry-fixer-bot/step-daily-digest": "workspace:*",
+    "@sentry-fixer-bot/step-outcome-poll": "workspace:*",
     "@anthropic-ai/sdk": "^0.96.0",
     "@aws-sdk/client-s3": "^3.1047.0",
     "@hono/trpc-server": "^0.4.0",

@@ -15,6 +15,7 @@
     "@sentry-fixer-bot/auth": "workspace:*",
     "@sentry-fixer-bot/db": "workspace:*",
     "@sentry-fixer-bot/env": "workspace:*",
+    "@sentry-fixer-bot/step-daily-digest": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "adm-zip": "^0.5.17",

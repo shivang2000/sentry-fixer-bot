@@ -45,6 +45,8 @@
         "@sentry-fixer-bot/auth": "workspace:*",
         "@sentry-fixer-bot/db": "workspace:*",
         "@sentry-fixer-bot/env": "workspace:*",
+        "@sentry-fixer-bot/step-daily-digest": "workspace:*",
+        "@sentry-fixer-bot/step-outcome-poll": "workspace:*",
         "@trpc/server": "catalog:",
         "better-auth": "catalog:",
         "dotenv": "catalog:",
@@ -123,6 +125,7 @@
         "@sentry-fixer-bot/auth": "workspace:*",
         "@sentry-fixer-bot/db": "workspace:*",
         "@sentry-fixer-bot/env": "workspace:*",
+        "@sentry-fixer-bot/step-daily-digest": "workspace:*",
         "@trpc/client": "catalog:",
         "@trpc/server": "catalog:",
         "adm-zip": "^0.5.17",
@@ -257,6 +260,22 @@
         "typescript": "catalog:",
       },
     },
+    "packages/steps/daily-digest": {
+      "name": "@sentry-fixer-bot/step-daily-digest",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@sentry-fixer-bot/db": "workspace:*",
+        "drizzle-orm": "^0.45.1",
+      },
+      "devDependencies": {
+        "@alertforge/channel-email": "workspace:*",
+        "@alertforge/channel-slack": "workspace:*",
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/steps/fan-out-channels": {
       "name": "@alertforge/step-fan-out-channels",
       "version": "0.0.0",
@@ -289,6 +308,20 @@
       "version": "0.0.0",
       "dependencies": {
         "@alertforge/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@sentry-fixer-bot/config": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/steps/outcome-poll": {
+      "name": "@sentry-fixer-bot/step-outcome-poll",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alertforge/core": "workspace:*",
+        "@sentry-fixer-bot/db": "workspace:*",
+        "drizzle-orm": "^0.45.1",
       },
       "devDependencies": {
         "@sentry-fixer-bot/config": "workspace:*",
@@ -803,6 +836,10 @@
     "@sentry-fixer-bot/db": ["@sentry-fixer-bot/db@workspace:packages/db"],
 
     "@sentry-fixer-bot/env": ["@sentry-fixer-bot/env@workspace:packages/env"],
+
+    "@sentry-fixer-bot/step-daily-digest": ["@sentry-fixer-bot/step-daily-digest@workspace:packages/steps/daily-digest"],
+
+    "@sentry-fixer-bot/step-outcome-poll": ["@sentry-fixer-bot/step-outcome-poll@workspace:packages/steps/outcome-poll"],
 
     "@sentry-fixer-bot/ui": ["@sentry-fixer-bot/ui@workspace:packages/ui"],
 

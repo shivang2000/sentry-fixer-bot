@@ -1,10 +1,11 @@
 import { type Logger, registry } from "@alertforge/core";
 import { createDb } from "@sentry-fixer-bot/db";
 import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
-import { alerts } from "@sentry-fixer-bot/db/schema/domain";
+import { alerts, prs, runs } from "@sentry-fixer-bot/db/schema/domain";
 import { channelConfigs, triggers } from "@sentry-fixer-bot/db/schema/triggers";
+import { buildDigest } from "@sentry-fixer-bot/step-daily-digest";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
 import { z } from "zod";
 import { adminProcedure, router } from "../index";
@@ -419,6 +420,109 @@ export const triggersRouter = router({
         sourceProject: normalized.sourceProject,
         externalId: normalized.externalId,
         title: normalized.title,
+      };
+    }),
+
+  /**
+   * P8 — preview the next daily digest for a trigger using the same
+   * 7d window the cron uses. Lets operators see "what would land in
+   * Slack/email at 06:00 UTC?" before scheduling actual sends.
+   *
+   * Returns a `DigestPayload` shaped object. The component caller
+   * formats it; this procedure stays pure of presentation.
+   */
+  previewDigest: adminProcedure
+    .input(z.object({ triggerId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const db = createDb();
+      const trigRows = await db
+        .select({
+          id: triggers.id,
+          name: triggers.name,
+          capCents: reposConfig.dailyCostCapCents,
+        })
+        .from(triggers)
+        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+        .where(eq(triggers.id, input.triggerId))
+        .limit(1);
+      const trigger = trigRows[0];
+      if (!trigger) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "trigger_not_found" });
+      }
+
+      const windowEnd = new Date();
+      const windowStart = new Date(windowEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const alertRows = await db
+        .selectDistinct({ id: alerts.id, fingerprint: alerts.fingerprint })
+        .from(alerts)
+        .innerJoin(runs, eq(runs.alertId, alerts.id))
+        .where(
+          and(
+            eq(runs.triggerId, input.triggerId),
+            gte(runs.startedAt, windowStart),
+            lte(runs.startedAt, windowEnd),
+          ),
+        );
+
+      const prRows = await db
+        .select({
+          id: prs.id,
+          outcome: prs.outcome,
+          fingerprint: alerts.fingerprint,
+          title: alerts.title,
+        })
+        .from(prs)
+        .innerJoin(runs, eq(runs.id, prs.runId))
+        .innerJoin(alerts, eq(alerts.id, prs.alertId))
+        .where(
+          and(
+            eq(runs.triggerId, input.triggerId),
+            gte(prs.openedAt, windowStart),
+            lte(prs.openedAt, windowEnd),
+          ),
+        );
+
+      const runRows = await db
+        .select({ id: runs.id, costCents: runs.costCents })
+        .from(runs)
+        .where(
+          and(
+            eq(runs.triggerId, input.triggerId),
+            gte(runs.startedAt, windowStart),
+            lte(runs.startedAt, windowEnd),
+          ),
+        );
+      const costCents = runRows.reduce((s, r) => s + r.costCents, 0);
+
+      const payload = buildDigest({
+        trigger: { id: trigger.id, name: trigger.name },
+        window: { start: windowStart, end: windowEnd },
+        alerts: alertRows,
+        runs: runRows,
+        prs: prRows.map((r) => ({
+          id: r.id,
+          fingerprint: r.fingerprint,
+          title: r.title,
+          outcome: r.outcome as
+            | "merged_clean"
+            | "merged_with_edits"
+            | "closed_unmerged"
+            | "stale_open"
+            | null,
+        })),
+        costCents,
+        capCents: trigger.capCents,
+      });
+
+      return {
+        triggerId: trigger.id,
+        triggerName: trigger.name,
+        ...payload,
+        // Serialise dates as ISO strings so the client doesn't need a
+        // Date hydration step.
+        windowStart: payload.windowStart.toISOString(),
+        windowEnd: payload.windowEnd.toISOString(),
       };
     }),
 });

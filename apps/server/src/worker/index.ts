@@ -5,6 +5,7 @@
  * standalone, or via the in-band import from the HTTP server in
  * container mode.
  */
+import { registerSelfImprovementCrons } from "../cron";
 import { log } from "../log";
 import { getBoss, getScheduleStatus, scheduleRecurring } from "../queue/boss";
 import {
@@ -136,6 +137,12 @@ async function main(): Promise<void> {
   // lastReviewedCommentAt so duplicate webhook+cron deliveries are
   // safe.
   await ensureDefaultSchedule(JOB_PR_COMMENT_POLL, "*/5 * * * *");
+
+  // P8 self-improvement crons: outcome-poll (02:00 UTC daily) + daily-
+  // digest (06:00 UTC daily). Lives in apps/server/src/cron/ so the
+  // worker module stays the place where queues + handlers register
+  // and the cron module owns its own schedule defaults.
+  await registerSelfImprovementCrons();
 
   log.info("worker ready");
 }
