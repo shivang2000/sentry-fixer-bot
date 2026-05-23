@@ -10,6 +10,8 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
+    "@alertforge/channel-email": "workspace:*",
+    "@alertforge/channel-slack": "workspace:*",
     "@alertforge/core": "workspace:*",
     "@alertforge/source-sentry": "workspace:*",
     "@alertforge/step-budget": "workspace:*",

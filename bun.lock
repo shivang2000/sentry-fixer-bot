@@ -23,6 +23,8 @@
     "apps/server": {
       "name": "server",
       "dependencies": {
+        "@alertforge/channel-email": "workspace:*",
+        "@alertforge/channel-slack": "workspace:*",
         "@alertforge/core": "workspace:*",
         "@alertforge/source-sentry": "workspace:*",
         "@alertforge/step-budget": "workspace:*",
@@ -91,6 +93,7 @@
         "@tanstack/react-query-devtools": "^5.91.1",
         "@tanstack/react-router-devtools": "^1.166.13",
         "@tanstack/router-plugin": "^1.167.22",
+        "@types/bun": "catalog:",
         "@types/node": "^22.13.14",
         "@types/react": "^19.2.14",
         "@types/react-dom": "catalog:",
@@ -116,6 +119,7 @@
     "packages/api": {
       "name": "@sentry-fixer-bot/api",
       "dependencies": {
+        "@alertforge/core": "workspace:*",
         "@sentry-fixer-bot/auth": "workspace:*",
         "@sentry-fixer-bot/db": "workspace:*",
         "@sentry-fixer-bot/env": "workspace:*",

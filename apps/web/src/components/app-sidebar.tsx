@@ -37,26 +37,30 @@ import {
   Sparkles,
   Stethoscope,
   Sun,
+  Zap,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
 
+// P6 reorg: /triggers is the new primary entry point — operators
+// configure triggers, not repos directly. /repos drops down to the
+// Operate group so the surface is still reachable for repo-level
+// config (test command, daily cap), but it isn't where new users land.
 const NAV_PRIMARY = [
   { to: "/", label: "Home", icon: Home },
+  { to: "/triggers", label: "Triggers", icon: Zap },
+  { to: "/runs", label: "Runs", icon: History },
   { to: "/chat", label: "Chat", icon: MessageSquareCode },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ] as const;
 
 const NAV_OPERATE = [
-  { to: "/repos", label: "Repos", icon: Database },
   { to: "/mcps", label: "MCPs", icon: Plug },
   { to: "/skills", label: "Skills", icon: Sparkles },
+  { to: "/repos", label: "Repos", icon: Database },
 ] as const;
 
-const NAV_OBSERVE = [
-  { to: "/runs", label: "Runs", icon: History },
-  { to: "/usage", label: "Usage", icon: Activity },
-] as const;
+const NAV_OBSERVE = [{ to: "/usage", label: "Usage", icon: Activity }] as const;
 
 const NAV_SYSTEM = [
   { to: "/doctor", label: "Doctor", icon: Stethoscope },

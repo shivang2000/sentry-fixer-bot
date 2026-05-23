@@ -1,9 +1,13 @@
+import { registry } from "@alertforge/core";
 import { createDb } from "@sentry-fixer-bot/db";
 import { channelConfigs, triggers } from "@sentry-fixer-bot/db/schema/triggers";
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, router } from "../index";
+import { describeZodObject, type SchemaShape } from "./describe-schema";
+
+export type { SchemaShape };
 
 // V1: Slack + email scaffolds land in P5; the type whitelist expands
 // as adapter packages are added. Until then the router accepts any
@@ -103,5 +107,41 @@ export const channelsRouter = router({
     const db = createDb();
     await db.delete(channelConfigs).where(eq(channelConfigs.id, input.id));
     return { ok: true as const };
+  }),
+
+  /**
+   * Catalog of registered channel adapters with their configSchema
+   * walked into a serializable shape the UI can render as a dynamic
+   * form via RegistryConfigForm. Sourced from the singleton registry
+   * populated at apps/server boot.
+   *
+   * requiresEnvKeysPresent maps env-key → boolean(process.env present)
+   * so the UI can flag "Resend API key missing" before the user picks
+   * the channel.
+   */
+  listAdapters: adminProcedure.query(() => {
+    const out = [] as Array<{
+      type: string;
+      displayName: string;
+      catalogEntry: {
+        description: string;
+        setupGuide: string;
+        requiresEnvKeys: string[];
+      };
+      requiresEnvKeysPresent: Record<string, boolean>;
+      configSchema: SchemaShape;
+    }>;
+    for (const adapter of registry.channels.values()) {
+      out.push({
+        type: adapter.type,
+        displayName: adapter.displayName,
+        catalogEntry: { ...adapter.catalogEntry },
+        requiresEnvKeysPresent: Object.fromEntries(
+          adapter.catalogEntry.requiresEnvKeys.map((k) => [k, !!process.env[k]]),
+        ),
+        configSchema: describeZodObject(adapter.configSchema),
+      });
+    }
+    return out;
   }),
 });

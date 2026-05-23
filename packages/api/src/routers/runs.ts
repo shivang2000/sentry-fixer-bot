@@ -1,10 +1,18 @@
 import { createDb } from "@sentry-fixer-bot/db";
+import { reposConfig } from "@sentry-fixer-bot/db/schema/admin";
 import { alerts, prs, runLogs, runs } from "@sentry-fixer-bot/db/schema/domain";
+import { triggers } from "@sentry-fixer-bot/db/schema/triggers";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
 import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../index";
+
+const WindowSchema = z.enum(["24h", "7d"]);
+function windowToCutoff(w: z.infer<typeof WindowSchema>): Date {
+  const ms = w === "24h" ? 24 * 3600_000 : 7 * 24 * 3600_000;
+  return new Date(Date.now() - ms);
+}
 
 let bossInstance: PgBoss | null = null;
 async function getBoss(): Promise<PgBoss> {
@@ -161,5 +169,115 @@ export const runsRouter = router({
         sentryProject: issue.project.slug,
         title: issue.title,
       };
+    }),
+
+  /**
+   * Roll up run costs by trigger over a window. Admin-only — surfaces
+   * dollar amounts and PR counts that are operator-business.
+   *
+   * Returns one row per trigger that has had ≥1 run in the window,
+   * with the trigger's repo + preset joined in so the /usage UI can
+   * render a card per trigger without a follow-up call.
+   */
+  usageByTrigger: adminProcedure
+    .input(z.object({ window: WindowSchema.default("24h") }))
+    .query(async ({ input }) => {
+      const db = createDb();
+      const cutoff = windowToCutoff(input.window);
+      const rows = await db
+        .select({
+          triggerId: triggers.id,
+          triggerName: triggers.name,
+          preset: triggers.preset,
+          sourceType: triggers.sourceType,
+          sourceProject: triggers.sourceProject,
+          repoGithub: reposConfig.github,
+          dailyCostCapCents: reposConfig.dailyCostCapCents,
+          runCount: sql<number>`count(${runs.id})::int`.as("run_count"),
+          prCount: sql<number>`count(distinct ${prs.id})::int`.as("pr_count"),
+          totalCostCents: sql<number>`coalesce(sum(${runs.costCents}), 0)::int`.as(
+            "total_cost_cents",
+          ),
+          totalTokensInput: sql<number>`coalesce(sum(${runs.tokensInput}), 0)::int`.as(
+            "total_tokens_input",
+          ),
+          totalTokensOutput: sql<number>`coalesce(sum(${runs.tokensOutput}), 0)::int`.as(
+            "total_tokens_output",
+          ),
+        })
+        .from(triggers)
+        .innerJoin(reposConfig, eq(reposConfig.id, triggers.repoId))
+        .leftJoin(runs, and(eq(runs.triggerId, triggers.id), gte(runs.startedAt, cutoff)))
+        .leftJoin(prs, eq(prs.runId, runs.id))
+        .groupBy(
+          triggers.id,
+          triggers.name,
+          triggers.preset,
+          triggers.sourceType,
+          triggers.sourceProject,
+          reposConfig.github,
+          reposConfig.dailyCostCapCents,
+        )
+        .orderBy(desc(sql`total_cost_cents`));
+      return rows;
+    }),
+
+  /**
+   * Roll up run costs by pipeline step over a window. Admin-only.
+   *
+   * Each run records the steps it completed in jsonb column
+   * `steps_completed`; we explode that array via `jsonb_array_elements_text`
+   * and group by step name. Cost is apportioned evenly across steps —
+   * V1 keeps the rollup honest-by-default until P8 lands per-step cost
+   * accounting on the runs table.
+   */
+  usageByStep: adminProcedure
+    .input(z.object({ window: WindowSchema.default("24h") }))
+    .query(async ({ input }) => {
+      const db = createDb();
+      const cutoff = windowToCutoff(input.window);
+      const result = await db.execute<{
+        step_name: string;
+        run_count: number;
+        total_cost_cents: number;
+        total_tokens_input: number;
+        total_tokens_output: number;
+      }>(sql`
+        with exploded as (
+          select
+            r.id as run_id,
+            r.cost_cents,
+            r.tokens_input,
+            r.tokens_output,
+            coalesce(jsonb_array_length(r.steps_completed), 0) as step_count,
+            jsonb_array_elements_text(r.steps_completed) as step_name
+          from ${runs} r
+          where r.started_at >= ${cutoff}
+            and r.steps_completed is not null
+            and jsonb_typeof(r.steps_completed) = 'array'
+            and jsonb_array_length(r.steps_completed) > 0
+        )
+        select
+          step_name,
+          count(distinct run_id)::int as run_count,
+          coalesce(sum(cost_cents / nullif(step_count, 0)), 0)::int as total_cost_cents,
+          coalesce(sum(tokens_input / nullif(step_count, 0)), 0)::int as total_tokens_input,
+          coalesce(sum(tokens_output / nullif(step_count, 0)), 0)::int as total_tokens_output
+        from exploded
+        group by step_name
+        order by total_cost_cents desc
+      `);
+      // node-postgres adapter returns { rows: [...] }; bun-sql returns
+      // an array directly. Handle both shapes for portability.
+      const rows = (result as { rows?: unknown }).rows ?? result;
+      return Array.isArray(rows)
+        ? (rows as Array<{
+            step_name: string;
+            run_count: number;
+            total_cost_cents: number;
+            total_tokens_input: number;
+            total_tokens_output: number;
+          }>)
+        : [];
     }),
 });
