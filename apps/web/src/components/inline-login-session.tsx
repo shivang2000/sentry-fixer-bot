@@ -86,9 +86,20 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
           break;
         case "exit":
           termRef.current?.writeln(`\r\n\x1b[33m●\x1b[0m Login flow ended (exit ${msg.code}).`);
+          // The child has exited; any auth card is now backed by a dead
+          // stdin, so clear it regardless of outcome.
+          setOauthUrl(null);
+          setDeviceCode(null);
           if (msg.code === 0) {
             toast.success(`${provider} login complete`);
             onCompleteRef.current?.();
+          } else {
+            // Real (un-masked, post `script -e`) failure: a rejected code,
+            // a sentry 403, an install error. Tell the operator instead of
+            // claiming success — they re-open the flow to try again.
+            toast.error(
+              `${provider} login failed (exit ${msg.code}). Check the terminal output and try again.`,
+            );
           }
           break;
         case "error":
@@ -112,7 +123,10 @@ export function InlineLoginSession({ provider, onComplete, onCancel, rows = 14 }
           provider={provider}
           onSubmit={(code) => {
             wsRef.current?.send(JSON.stringify({ type: "oauth_response", code }));
-            setOauthUrl(null);
+            // Keep the card mounted. If the CLI rejects the code and
+            // re-prompts (process still alive), the operator needs it to
+            // paste again. The `exit` handler clears it once the child
+            // actually exits — on success OR failure.
           }}
           onCancel={() => {
             setOauthUrl(null);

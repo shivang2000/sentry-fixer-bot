@@ -45,7 +45,12 @@ export function spawnPtyCommand(input: {
   // `exec` so claude becomes pid of the bash that script wraps — script
   // exits when claude exits and we get a clean `exit` event.
   const wrapped = `stty cols ${cols} rows ${rows}; exec ${inner}`;
-  const proc = spawn("script", ["-q", "-c", wrapped, "/dev/null"], {
+  // `-e/--return` is REQUIRED: without it util-linux script(1) reports its
+  // own exit status (0 on clean EOF), masking the child's real code. The
+  // login WS relays that code to the client as the sole "did it work?"
+  // signal — a masked 0 makes a failed `claude auth login` or a sentry
+  // 403 (sentry-setup.sh → exit 12) surface as "login complete".
+  const proc = spawn("script", ["-e", "-q", "-c", wrapped, "/dev/null"], {
     cwd: input.cwd,
     env: {
       COLUMNS: String(cols),

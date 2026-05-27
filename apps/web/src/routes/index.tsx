@@ -20,7 +20,7 @@ import {
   Terminal,
   Webhook,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { InlineLoginSession, type LoginProvider } from "@/components/inline-login-session";
@@ -72,14 +72,30 @@ function HomeWizard() {
   // everything is green. Operators wanted a place to see "all set"
   // and re-check pills; auto-jumping to /chat hid that.
 
-  // When a step the operator is currently shelling for flips done
-  // (via polling OR via the WS exit handler), auto-collapse the shell
+  // Capture whether the step was ALREADY done at the moment its shell
+  // opened. "Log in again" (re-auth) opens a shell on a done step on
+  // purpose; without this the auto-collapse effect below would see
+  // `step.done` and slam it shut before the operator can do anything.
+  const doneAtExpandRef = useRef(false);
+  useEffect(() => {
+    if (expandedShellId) {
+      doneAtExpandRef.current = steps.find((s) => s.id === expandedShellId)?.done ?? false;
+    }
+    // Intentionally NOT depending on `steps`: we want the done-state as it
+    // was at open time, not a live value that updates while the shell runs.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  }, [expandedShellId]);
+
+  // When a step the operator is currently shelling for *transitions* to
+  // done (via polling OR the WS exit handler), auto-collapse the shell
   // and surface a success toast. Without this the operator stares at a
-  // dead terminal and isn't sure the login took.
+  // dead terminal and isn't sure the login took. Skip steps that were
+  // already done at open — those are deliberate re-auth sessions and the
+  // InlineLoginSession's own onComplete handles their collapse.
   useEffect(() => {
     if (!expandedShellId) return;
     const step = steps.find((s) => s.id === expandedShellId);
-    if (step?.done) {
+    if (step?.done && !doneAtExpandRef.current) {
       toast.success(`${step.label} — done`);
       setExpandedShellId(null);
     }

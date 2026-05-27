@@ -188,6 +188,17 @@ if ! command -v claude >/dev/null 2>&1; then
   fi
 fi
 
+# ---------- Sentry CLI ----------
+if ! command -v sentry-cli >/dev/null 2>&1; then
+  log "installing sentry-cli"
+  # Official installer pulls the binary from Sentry's own CDN
+  # (release-registry.services.sentry.io) — NOT the GitHub API, so it can't
+  # hit the unauthenticated-API rate-limit 403 that the cli.sentry.dev
+  # installer does. Baked in here so the /api/login/sentry flow never has to
+  # download anything at login time (mirrors gh + claude above).
+  curl -sL https://sentry.io/get-cli/ | INSTALL_DIR=/usr/local/bin sh
+fi
+
 # ---------- AWS CLI v2 ----------
 if ! command -v aws >/dev/null 2>&1; then
   log "installing AWS CLI v2"
@@ -232,6 +243,7 @@ log "verifying tool versions"
   echo "npm     : $(npm -v)"
   echo "bun     : $(bun --version)"
   echo "claude  : $(claude --version 2>/dev/null || echo not-on-path)"
+  echo "sentry  : $(sentry-cli --version 2>/dev/null || echo not-on-path)"
   echo "aws     : $(aws --version)"
   echo "psql    : $(psql --version)"
   echo "nginx   : $(nginx -v 2>&1)"

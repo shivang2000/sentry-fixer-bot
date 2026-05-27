@@ -223,10 +223,14 @@ function loginSpawn(provider: LoginProvider): PtyHandle {
   // sentry — installs sentry-cli onto the state volume (if missing),
   // runs `sentry-cli login` for the official OAuth flow, then hands off
   // to a bun shim that writes the token + org slug into the env file.
+  // Pin HOME to the state volume (like claude/github above) so the CLI's
+  // creds land under /alertforge/state/home/.sentry and survive a
+  // container recreate — process.env.HOME is /root in container mode.
   return spawnPtyCommand({
     cmd: "bash",
     args: [`${process.cwd()}/apps/server/src/cli/sentry-setup.sh`],
     cwd: process.cwd(),
+    env: { HOME: stateHome },
   });
 }
 
